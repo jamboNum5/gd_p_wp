@@ -485,6 +485,27 @@ object {
   max-width: 100%;
 }
 
+/* =Well
+----------------------------------------------- */
+.well {
+  background-color: #fff;
+  padding: 15px;
+  border: 1px solid #DADADA;
+  overflow: hidden;
+  clear: both;
+}
+
+.well h3 {
+    margin-top:10px;
+}
+
+.well li {
+}
+.well ul{
+padding-left: 10px;
+    margin-left: 5px;
+}
+
 /* =Widgets
 ----------------------------------------------- */
 
@@ -536,13 +557,7 @@ object {
 #secondary .widget_recent_comments ul li:before {
   content: '\f0e5';
 }
-.well {
-  background-color: #fff;
-  padding: 30px;
-  border: 1px solid #DADADA;
-  overflow: hidden;
-  clear: both;
-}
+
 #secondary .widget > h3 {
   font-size: 14px;
   text-transform: uppercase;
@@ -1415,8 +1430,18 @@ button[type=submit],
 ----------------------------------------------- */
 .home_frame{
 display:inline-block;
+    width: 100%;
     padding:20px 35px 50px 35px;
 }
+
+.solid-color h1, .solid-color h2, .solid-color p, .solid-color a {
+    color:#ffffff;
+}
+
+.solid-color a:hover{
+    color: #ededed;
+}
+
 #beginning{
     background-image: url('/gd_p_wp/wp-content/themes/sparkling/images/waterline.png');
     background-repeat: repeat-x;
@@ -1425,9 +1450,7 @@ display:inline-block;
 #beginning, #post-2 >header > h1{
     background-color: #5b7bd1;
 }
-#beginning h2, #beginning p, #end h2, #end h2 {
-    color:#ffffff;
-}
+
 #middle{
 }
 #end{
