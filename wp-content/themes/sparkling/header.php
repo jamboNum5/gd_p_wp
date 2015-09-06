@@ -31,7 +31,7 @@
 <body <?php body_class(); ?>>
 <div id="page" class="hfeed site">
 
-	<header id="masthead" class="site-header" role="banner">
+	<header id="masthead" class="container site-header" role="banner">
 		<nav class="navbar navbar-default" role="navigation">
 			<div class="container">
 				<div class="row">

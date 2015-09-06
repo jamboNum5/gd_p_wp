@@ -360,11 +360,11 @@ hr.section-divider {
 .post-inner-content {
   padding: 45px 50px;
   background-color: #fff;
-  border: 1px solid #dadada;
-/*  border-top: none;*/
+  /* border: 1px solid #dadada;
+ border-top: none;*/
 }
 .post-inner-content:first-child {
-  border-top: 1px solid #dadada;;
+  /*border-top: 1px solid #dadada;*/
 }
 .entry-title {
   margin-top: 0;
@@ -1443,7 +1443,7 @@ display:inline-block;
 }
 
 #beginning{
-    background-image: url('/gd_p_wp/wp-content/themes/sparkling/images/waterline.png');
+    background-image: url('/wp-content/themes/sparkling/images/waterline.png');
     background-repeat: repeat-x;
     background-position: bottom;
 }
@@ -1475,6 +1475,9 @@ display:inline-block;
     margin:0;
 }
 
+#emergency {
+    background-color: #d84949;
+}
 /* =Images
 ----------------------------------------------- */
 #leak-tap {
@@ -1486,6 +1489,11 @@ display:inline-block;
     padding:50px 0 0 0;
     position: relative;
     right:-30px;
+}
+
+#gas-safe{
+    max-width: 155px;
+    height:auto;
 }
 
 /* =Images
