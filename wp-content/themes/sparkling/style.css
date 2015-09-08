@@ -1498,3 +1498,8 @@ display:inline-block;
 
 /* =Images
 ----------------------------------------------- */
+.category-services .entry-meta, .category-services .navigation .post-navigation {
+    display: none;
+}
+
+.category-services .navigation .post-navigation
