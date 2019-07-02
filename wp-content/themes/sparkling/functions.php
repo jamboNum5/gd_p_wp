@@ -202,6 +202,9 @@ add_filter( 'gallery_style', 'sparkling_remove_gallery_css' );
  * Enqueue scripts and styles.
  */
 function sparkling_scripts() {
+	// Main Style Sheeeeet
+	wp_enqueue_style( 'sparkling-custom', get_template_directory_uri() . '/style.css' );
+
 
   // Add Bootstrap default CSS
   wp_enqueue_style( 'sparkling-bootstrap', get_template_directory_uri() . '/inc/css/bootstrap.min.css' );

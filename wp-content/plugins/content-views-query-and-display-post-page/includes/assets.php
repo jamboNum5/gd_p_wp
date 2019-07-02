@@ -1,16 +1,19 @@
 <?php
-
 /**
  * Asset management
  *
  * Register, enqueue, localize asset functions
  *
  * @package   PT_Content_Views
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 if ( !class_exists( 'PT_CV_Asset' ) ) {
 
 	/**
@@ -29,10 +32,9 @@ if ( !class_exists( 'PT_CV_Asset' ) ) {
 		 * if an asset doesn't have configed version, it will get plugin version as asset version
 		 */
 		static $version = array(
-			'bootstrap'				 => '3.3.0',
-			'bootstrap-paginator'	 => '0.5',
-			'select2'				 => '3.4.5',
-			'select2-bootstrap'		 => '3.4.5',
+			'bootstrap'			 => '3.3.5',
+			'select2'			 => '3.4.5',
+			'select2-bootstrap'	 => '3.4.5',
 		);
 
 		/**
@@ -70,7 +72,7 @@ if ( !class_exists( 'PT_CV_Asset' ) ) {
 		static function style() {
 			return array(
 				'bootstrap'			 => array(
-					'src' => plugins_url( 'assets/bootstrap/css/bootstrap.min.css', PT_CV_FILE ),
+					'src' => plugins_url( 'public/assets/css/bootstrap.custom.min.css', PT_CV_FILE ),
 				),
 				'select2'			 => array(
 					'src' => plugins_url( 'assets/select2/select2.min.css', PT_CV_FILE ),
@@ -88,15 +90,11 @@ if ( !class_exists( 'PT_CV_Asset' ) ) {
 		 */
 		static function script() {
 			return array(
-				'bootstrap'				 => array(
-					'src'	 => plugins_url( 'assets/bootstrap/js/bootstrap.min.js', PT_CV_FILE ),
+				'bootstrap'	 => array(
+					'src'	 => plugins_url( 'public/assets/js/bootstrap.custom.min.js', PT_CV_FILE ),
 					'deps'	 => array( 'jquery' ),
 				),
-				'bootstrap-paginator'	 => array(
-					'src' => plugins_url( 'assets/bootstrap-paginator/bootstrap-paginator.min.js', PT_CV_FILE ),
-				// 'deps' => array( PT_CV_PREFIX . 'bootstrap' . '-' . 'script' ),
-				),
-				'select2'				 => array(
+				'select2'	 => array(
 					'src'	 => plugins_url( 'assets/select2/select2.min.js', PT_CV_FILE ),
 					'deps'	 => array( 'jquery' ),
 				),
@@ -160,13 +158,14 @@ if ( !class_exists( 'PT_CV_Asset' ) ) {
 		 * @param string $translation_array Array of translation strings
 		 * @param string $prefix            Prefix string for asset
 		 */
-		static function localize_script( $name, $object_name, $translation_array,
-								   $prefix = '' ) {
+		static function localize_script( $name, $object_name, $translation_array, $prefix = '' ) {
 			$type	 = 'script';
 			$prefix_ = !empty( $prefix ) ? $prefix : self::$prefix;
-			$handle	 = $prefix_ . $name . '-' . $type;
 
-			wp_localize_script( $handle, $object_name, $translation_array );
+			foreach ( (array) $name as $nm ) {
+				$handle = $prefix_ . $nm . '-' . $type;
+				wp_localize_script( $handle, $object_name, $translation_array );
+			}
 		}
 
 		/**

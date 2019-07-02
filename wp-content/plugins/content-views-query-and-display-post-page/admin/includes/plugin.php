@@ -3,11 +3,15 @@
  * Form, option group, option name, option fields
  *
  * @package   PT_Content_Views_Admin
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 if ( !class_exists( 'PT_CV_Plugin' ) ) {
 
 	/**
@@ -34,13 +38,13 @@ if ( !class_exists( 'PT_CV_Plugin' ) ) {
 		 */
 		public static function settings_page_section_one() {
 
-			$file_path = plugin_dir_path( PT_CV_FILE ) . 'admin/includes/templates/settings-section-one.php';
+			$file_path = PT_CV_PATH . 'admin/includes/templates/settings-section-one.php';
 
 			$text = PT_CV_Functions::file_include_content( $file_path );
 
 			$text = apply_filters( PT_CV_PREFIX_ . 'settings_page_section_one', $text );
 
-			echo balanceTags( $text );
+			echo $text;
 		}
 
 		/**
@@ -48,13 +52,13 @@ if ( !class_exists( 'PT_CV_Plugin' ) ) {
 		 */
 		public static function settings_page_section_two() {
 
-			$file_path = plugin_dir_path( PT_CV_FILE ) . 'admin/includes/templates/settings-section-two.php';
+			$file_path = PT_CV_PATH . 'admin/includes/templates/settings-section-two.php';
 
 			$text = PT_CV_Functions::file_include_content( $file_path );
 
 			$text = apply_filters( PT_CV_PREFIX_ . 'settings_page_section_two', $text );
 
-			echo balanceTags( $text );
+			echo $text;
 		}
 
 		/**
@@ -65,7 +69,7 @@ if ( !class_exists( 'PT_CV_Plugin' ) ) {
 
 			self::$options	 = get_option( PT_CV_OPTION_NAME );
 			?>
-			<form method="post" action="options.php">
+			<form method="post" action="options.php" class="cvform">
 				<?php
 				// This prints out all hidden setting fields
 				settings_fields( PT_CV_OPTION_NAME . '_group' );
@@ -76,7 +80,7 @@ if ( !class_exists( 'PT_CV_Plugin' ) ) {
 			<?php
 			$text			 = ob_get_clean();
 
-			echo balanceTags( $text );
+			echo $text;
 		}
 
 		/**
@@ -85,27 +89,17 @@ if ( !class_exists( 'PT_CV_Plugin' ) ) {
 		public static function register_settings() {
 
 			register_setting(
-			PT_CV_OPTION_NAME . '_group', // Option group
-   PT_CV_OPTION_NAME, // Option name
-   array( __CLASS__, 'field_sanitize' ) // Sanitize
+				PT_CV_OPTION_NAME . '_group', PT_CV_OPTION_NAME, array( __CLASS__, 'field_sanitize' )
 			);
 
 			// Common setting Section
 			$this_section = 'setting_frontend_assets';
 			add_settings_section(
-			$this_section, // ID
-   '', // Title
-   array( __CLASS__, 'section_callback_setting_frontend_assets' ), // Callback
-   PT_CV_DOMAIN // Page
+				$this_section, '', array( __CLASS__, 'section_callback_setting_frontend_assets' ), PT_CV_DOMAIN
 			);
 
 			// Define Common setting fields
-			$frontend_assets_fields = array(
-				array(
-					'id'	 => 'unload_bootstrap',
-					'title'	 => '<strong>' . __( 'Frontend assets', PT_CV_DOMAIN ) . '</strong>',
-				),
-			);
+			$frontend_assets_fields = array();
 
 			// Filter Frontend assets option
 			$frontend_assets_fields = apply_filters( PT_CV_PREFIX_ . 'frontend_assets_fields', $frontend_assets_fields );
@@ -145,42 +139,25 @@ if ( !class_exists( 'PT_CV_Plugin' ) ) {
 		 * @param string $section    Id of setting section
 		 * @param string $class      Class name to find the callback function
 		 */
-		public static function field_register( $field_info, $section,
-										 $class = __CLASS__ ) {
+		public static function field_register( $field_info, $section, $class = __CLASS__ ) {
 			if ( !$field_info ) {
 				return false;
 			}
 
 			add_settings_field(
-			$field_info[ 'id' ], // ID
-   $field_info[ 'title' ], // Title
-   array( $class, 'field_callback_' . $field_info[ 'id' ] ), // Callback
-   PT_CV_DOMAIN, // Page
-   $section // Section
+				$field_info[ 'id' ], $field_info[ 'title' ], array( $class, 'field_callback_' . $field_info[ 'id' ] ), PT_CV_DOMAIN, $section
 			);
 		}
 
 		/**
-		 * License key field
-		 */
-		public static function field_callback_unload_bootstrap() {
-			$field_name = 'unload_bootstrap';
-
-			self::_field_print(
-			$field_name, 'checkbox', __( "Don't load <b>Bootstrap 3</b> style & script (in frontend of website)", PT_CV_DOMAIN ), __( 'Only tick this option if Bootstrap has been loaded by active theme or other plugins', PT_CV_DOMAIN )
-			);
-		}
-
-		/**
-		 * Print text/password field
+		 * Print any field
 		 *
 		 * @param string $field_name The ID of field
 		 * @param string $field_type The type of field
 		 * @param string $text       The label of field
 		 * @param string $desc       Description text
 		 */
-		static function _field_print( $field_name, $field_type = 'text', $text = '',
-								$desc = '' ) {
+		static function _field_print( $field_name, $field_type = 'text', $text = '', $desc = '' ) {
 
 			// Get Saved value
 			$field_value = isset( self::$options[ $field_name ] ) ? esc_attr( self::$options[ $field_name ] ) : '';
@@ -195,7 +172,7 @@ if ( !class_exists( 'PT_CV_Plugin' ) ) {
 			$field_id = esc_attr( $field_name );
 
 			printf(
-			'<input type="%1$s" id="%2$s" name="%3$s[%2$s]" value="%4$s" %5$s /> ', esc_attr( $field_type ), $field_id, PT_CV_OPTION_NAME, $field_value, $checked
+				'<input type="%1$s" id="%2$s" name="%3$s[%2$s]" value="%4$s" %5$s /> ', esc_attr( $field_type ), $field_id, PT_CV_OPTION_NAME, $field_value, $checked
 			);
 
 			// For radio, checkbox field

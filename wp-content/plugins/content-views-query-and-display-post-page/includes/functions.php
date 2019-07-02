@@ -3,11 +3,15 @@
  * Contain main functions to work with plugin, post, custom fields...
  *
  * @package   PT_Content_Views
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 if ( !function_exists( 'get_plugin_data' ) ) {
 	require_once( ABSPATH . 'wp-admin/includes/plugin.php' );
 }
@@ -55,7 +59,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 			}
 
 			/**
-			 * qTranslate family (qTranslate, mqTranslate, qTranslate-X)
+			 * qTranslate-X (and qTranslate, mqTranslate)
 			 * @since 1.5.3
 			 */
 			global $q_config;
@@ -83,7 +87,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 			}
 
 			/**
-			 * qTranslate family (qTranslate, mqTranslate, qTranslate-X)
+			 * qTranslate-X (and qTranslate, mqTranslate)
 			 * @since 1.5.3
 			 */
 			global $q_config;
@@ -116,10 +120,9 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param string $sub_page    Slug of sub menu
 		 * @param string $class       Class name which contains function to output content of page created by this menu
 		 */
-		static function menu_add_sub( $parent_slug, $page_title, $menu_title,
-								$user_role, $sub_page, $class ) {
+		static function menu_add_sub( $parent_slug, $page_title, $menu_title, $user_role, $sub_page, $class ) {
 			return add_submenu_page(
-			$parent_slug, $page_title, $menu_title, $user_role, $parent_slug . '-' . $sub_page, array( $class, 'display_sub_page_' . $sub_page )
+				$parent_slug, $page_title, $menu_title, $user_role, $parent_slug . '-' . $sub_page, array( $class, 'display_sub_page_' . $sub_page )
 			);
 		}
 
@@ -187,7 +190,11 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 			if ( $prev_return ) {
 				return PT_CV_Functions::$prev_random_string;
 			}
-			PT_CV_Functions::$prev_random_string = substr( md5( rand() ), 0, 10 );
+			// Don't use uniqid(), it will cause bug when multiple elements have same ID
+			$str	 = '0123456789abcdefghijklmnopqrstuvwxyz';
+			$rand	 = substr( md5( mt_rand() ), 0, 7 ) . substr( str_shuffle( $str ), 0, 3 );
+
+			PT_CV_Functions::$prev_random_string = $rand;
 
 			return PT_CV_Functions::$prev_random_string;
 		}
@@ -224,29 +231,98 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param int $num_words
 		 * @return string
 		 */
-		static function wp_trim_words( $text, $num_words = 500 ) {
-			// Add shortcode which was not added to global $shortcode_tags manually
-			do_action( PT_CV_PREFIX_ . 'before_strip_shortcodes' );
+		static function cv_trim_words( $text, $num_words = 500 ) {
+			$text = apply_filters( PT_CV_PREFIX_ . 'before_generate_excerpt', $text );
 
-			// Strip all shortcodes
-			$text = strip_shortcodes( $text );
-
-			// Recovery global $shortcode_tags
-			do_action( PT_CV_PREFIX_ . 'after_strip_shortcodes' );
-
-			// Strip HTML tags
-			$result = self::pt_strip_tags( $text );
-
-			// Split words
-			$array = preg_split( "/[\n\r\t ]+/", $result, $num_words + 1, PREG_SPLIT_NO_EMPTY );
-
-			//  Already short enough, return the whole thing
-			if ( count( $array ) > $num_words ) {
-				array_splice( $array, $num_words );
-				$result = implode( ' ', $array );
+			if ( apply_filters( PT_CV_PREFIX_ . 'excerpt_strip_shortcode', true ) ) {
+				$text = self::cv_strip_shortcodes( $text );
+			} else {
+				$text = do_shortcode( $text );
 			}
 
-			return $result;
+			// Prevent embedded URLs from showing
+			global $wp_embed;
+			if ( method_exists( $wp_embed, 'autoembed' ) ) {
+				$text = $wp_embed->autoembed( $text );
+			}
+
+			$result = self::cv_strip_tags( $text );
+			return self::trim_words( $result, $num_words );
+		}
+
+		/**
+		 * Strip shortcodes in CV way, to replace WP strip_shortcodes()
+		 * @after 1.8.3
+		 * @param string $text
+		 */
+		static function cv_strip_shortcodes( $text, $strip_all = true ) {
+			if ( apply_filters( PT_CV_PREFIX_ . 'excerpt_strip_all_shortcodes', false ) ) {
+				return strip_shortcodes( $text );
+			}
+
+			global $shortcode_tags, $cv_shortcode_tags_backup;
+			if ( !isset( $cv_shortcode_tags_backup ) ) {
+				$tagnames	 = array_keys( $shortcode_tags );
+				$tagregexp	 = join( '|', array_map( 'preg_quote', $tagnames ) );
+			} else {
+				$tagregexp = $cv_shortcode_tags_backup;
+			}
+
+			if ( $strip_all ) {
+				// Strip some shortcodes
+				$temp_shortcode_tags = $shortcode_tags;
+				$shortcode_tags		 = apply_filters( PT_CV_PREFIX_ . 'shortcode_to_strip', array( 'caption' => '', 'embed' => '' ) );
+				$text				 = strip_shortcodes( $text );
+				$shortcode_tags		 = $temp_shortcode_tags;
+			}
+
+			// Keep other shortcodes' content
+			return preg_replace( '/'
+				. '\[' // Opening bracket
+				. '(\/?)'
+				. "($tagregexp)" // All shortcode tags
+				. '[^\]]*' // Shortcode parameters
+				. '\]' // Closing bracket
+				. '/', '', $text );
+		}
+
+		/**
+		 * Trim words in CV way
+		 * @return string
+		 */
+		static function trim_words( $text, $num_words ) {
+			$more	 = '';
+			$text	 = apply_filters( PT_CV_PREFIX_ . 'before_trim_words', $text );
+
+			/*
+			 * translators: If your word count is based on single characters (e.g. East Asian characters),
+			 * enter 'characters_excluding_spaces' or 'characters_including_spaces'. Otherwise, enter 'words'.
+			 * Do not translate into your own language.
+			 */
+			/**
+			 * Do not use "[\r\n\t ]|\xC2\xA0|&nbsp;" as regex pattern, it can stop PHP process
+			 * @since 1.9.5
+			 */
+			$text = str_replace( array( '\xC2\xA0', '&nbsp;' ), ' ', $text );
+			if ( strpos( _x( 'words', 'Word count type. Do not translate!' ), 'characters' ) === 0 && preg_match( '/^utf\-?8$/i', get_option( 'blog_charset' ) ) ) {
+				$text		 = trim( preg_replace( "/[\n\r\t ]+/", ' ', $text ), ' ' );
+				preg_match_all( '/./u', $text, $words_array );
+				$words_array = array_slice( $words_array[ 0 ], 0, $num_words + 1 );
+				$sep		 = '';
+			} else {
+				$words_array = preg_split( "/[\n\r\t ]+/", $text, $num_words + 1, PREG_SPLIT_NO_EMPTY );
+				$sep		 = ' ';
+			}
+
+			if ( count( $words_array ) > $num_words ) {
+				array_pop( $words_array );
+				$text	 = implode( $sep, $words_array );
+				$text	 = $text . $more;
+			} else {
+				$text = implode( $sep, $words_array );
+			}
+
+			return apply_filters( PT_CV_PREFIX_ . 'after_trim_words', $text );
 		}
 
 		/**
@@ -256,27 +332,44 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param string $string
 		 * @return string
 		 */
-		static function pt_strip_tags( $string ) {
-			$string = preg_replace( '@<(script|style)[^>]*?>.*?</\\1>@si', '', $string );
-
-			# allow some tags
-
-			$dargs			 = PT_CV_Functions::get_global_variable( 'dargs' );
-			# predefined allowable HTML tags
-			$allowable_tags	 = (array) apply_filters( PT_CV_PREFIX_ . 'allowable_tags', array( '<a>', '<br>', '<strong>', '<em>', '<strike>', '<i>', '<ul>', '<ol>', '<li>' ) );
-			$allowed_tags	 = '';
-			if ( apply_filters( PT_CV_PREFIX_ . 'enable_options', !empty( $dargs[ 'field-settings' ][ 'content' ][ 'allow_html' ] ), 'allow_html' ) ) {
-				$allowed_tags = implode( '', $allowable_tags );
-
-				// Changes double line-breaks in the text into HTML paragraphs (<p>, <br>)
-				if ( apply_filters( PT_CV_PREFIX_ . 'wpautop', 0 ) ) {
-					$string = wpautop( $string );
-				}
+		static function cv_strip_tags( $string ) {
+			// Changes double line-breaks in the text into HTML paragraphs (<p>, <br>)
+			if ( apply_filters( PT_CV_PREFIX_ . 'wpautop', 0 ) ) {
+				$string = wpautop( $string );
 			}
 
-			$string = strip_tags( $string, $allowed_tags );
+			// Remove entire tag content
+			$tags_to_rm	 = apply_filters( PT_CV_PREFIX_ . 'tag_to_remove', array( 'script', 'style' ) );
+			$string		 = preg_replace( array( '@<(' . implode( '|', $tags_to_rm ) . ')[^>]*?>.*?</\\1>@si' ), '', $string );
+
+			// Strip HTML tags
+			if ( apply_filters( PT_CV_PREFIX_ . 'strip_tags', 1 ) ) {
+				$allowed_tags = '';
+				if ( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'field-excerpt-allow_html' ) ) {
+					$allowable_tags	 = (array) apply_filters( PT_CV_PREFIX_ . 'allowable_tags', array( '<a>', '<br>', '<strong>', '<em>', '<strike>', '<i>', '<ul>', '<ol>', '<li>' ) );
+					$allowed_tags	 = implode( '', $allowable_tags );
+				}
+
+				$string = strip_tags( $string, $allowed_tags );
+			}
 
 			return trim( $string );
+		}
+
+		/**
+		 * Handle slug of non-latin languages
+		 * used in CVP < 4.1
+		 *
+		 * @param string $slug
+		 * @param boolean $sanitize
+		 * @return string
+		 */
+		static function term_slug_sanitize( $slug, $sanitize = false ) {
+			if ( $sanitize && preg_match( '/%[0-9a-f][0-9a-f]/', $slug ) ) {
+				$slug = str_replace( '%', '@', $slug );
+			}
+
+			return $slug;
 		}
 
 		/**
@@ -299,7 +392,11 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param array      $array_to_get Array to get values of wanted setting
 		 * @param mixed|null $assign       The value to assign if setting is not found
 		 */
-		static function setting_value( $field, $array_to_get, $assign = NULL ) {
+		static function setting_value( $field, $array_to_get = NULL, $assign = NULL ) {
+			if ( empty( $array_to_get ) ) {
+				$array_to_get = PT_CV_Functions::get_global_variable( 'view_settings' );
+			}
+
 			return isset( $array_to_get[ $field ] ) ? $array_to_get[ $field ] : $assign;
 		}
 
@@ -311,8 +408,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param array  $array_to_get  Array to get values of wanted setting fields
 		 * @param string $prefix        Prefix string to looking for fields in $array_to_get
 		 */
-		static function settings_values( $fields, &$array_to_save, $array_to_get,
-								   $prefix ) {
+		static function settings_values( $fields, &$array_to_save, $array_to_get, $prefix ) {
 			foreach ( $fields as $tsetting ) {
 				$array_to_save[ $tsetting ] = PT_CV_Functions::setting_value( $prefix . $tsetting, $array_to_get );
 			}
@@ -347,7 +443,6 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param bool   $backend Get settings from Backend form
 		 */
 		static function settings_values_by_prefix( $prefix, $backend = FALSE ) {
-
 			$view_settings = PT_CV_Functions::get_global_variable( 'view_settings' );
 
 			if ( !$view_settings && $backend ) {
@@ -355,12 +450,12 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 				$view_settings = $pt_cv_admin_settings;
 			}
 
-			$result = array();
-
+			$result	 = array();
+			$strlen	 = strlen( $prefix );
 			foreach ( (array) $view_settings as $name => $value ) {
-				// If name of setting match with prefix string, got it name
-				if ( substr( $name, 0, strlen( $prefix ) ) === $prefix ) {
-					$result[ substr( $name, strlen( $prefix ) ) ] = $value;
+				// If name of setting match with prefix string, got it
+				if ( strpos( $name, $prefix ) === 0 ) {
+					$result[ substr( $name, $strlen ) ] = $value;
 				}
 			}
 
@@ -375,69 +470,47 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @return string
 		 */
 		static function post_terms( $post ) {
-			global $pt_cv_glb, $pt_cv_id;
+			global $pt_cv_glb;
 
-			if ( !isset( $pt_cv_glb[ 'item_terms' ] ) ) {
-				$pt_cv_glb[ 'item_terms' ] = array();
-			}
-
-			// List of HTML link to terms
-			$links = array();
-
-			// Get list of taxonomies
-			$taxonomies = get_taxonomies( '', 'names' );
-
-			$taxonomies = apply_filters( PT_CV_PREFIX_ . 'taxonomies_list', $taxonomies );
-
-			// Get post ID
-			$post_id = is_object( $post ) ? $post->ID : $post;
-
-			// Get lists of terms of this post
-			$terms = wp_get_object_terms( $post_id, $taxonomies );
+			$links				 = array();
+			$taxonomy_terms		 = array();
+			$post_terms			 = array();
+			$taxonomies			 = get_taxonomies( array( 'public' => true ), 'names' );
+			$taxonomies_to_show	 = apply_filters( PT_CV_PREFIX_ . 'taxonomies_to_show', $taxonomies );
+			$post_id			 = is_object( $post ) ? $post->ID : $post;
+			$terms				 = wp_get_object_terms( $post_id, $taxonomies );
 
 			foreach ( $terms as $term ) {
-				$links[] = sprintf(
-				'<a href="%1$s" title="%2$s %3$s" class="%4$s">%3$s</a>', esc_url( get_term_link( $term, $term->taxonomy ) ), __( 'View all posts in', PT_CV_DOMAIN ), $term->name, PT_CV_PREFIX . 'tax-' . $term->slug
-				);
-
-				if ( !isset( $pt_cv_glb[ 'item_terms' ][ $post_id ] ) ) {
-					$pt_cv_glb[ 'item_terms' ][ $post_id ] = array();
+				$term_html		 = '';
+				$term_slug		 = $term->slug;
+				$include_this	 = apply_filters( PT_CV_PREFIX_ . 'terms_include_this', true, $term ) && in_array( $term->taxonomy, $taxonomies_to_show );
+				if ( $include_this ) {
+					$href		 = esc_url( get_term_link( $term, $term->taxonomy ) );
+					$term_name	 = esc_attr( $term->name );
+					$class		 = esc_attr( PT_CV_PREFIX . 'tax-' . $term_slug );
+					$term_html	 = apply_filters( PT_CV_PREFIX_ . 'post_term_html', "<a href='$href' title='$term_name' class='$class'>{$term->name}</a>", $term );
+					$links[]	 = $term_html;
 				}
-				$pt_cv_glb[ 'item_terms' ][ $post_id ][ $term->slug ] = $term->name;
+
+				$term_info							 = apply_filters( PT_CV_PREFIX_ . 'post_term', array( 'key' => $term_slug, 'value' => $term->name ), $term );
+				$post_terms[ $term_info[ 'key' ] ]	 = $term_info[ 'value' ];
+
+				// Add this term to terms list of an item
+				if ( !isset( $taxonomy_terms[ $term->taxonomy ] ) ) {
+					$taxonomy_terms[ $term->taxonomy ] = array();
+				}
+				$taxonomy_terms[ $term->taxonomy ][] = $term_html;
 			}
 
-			// Adjust terms list
-			return implode( ', ', apply_filters( PT_CV_PREFIX_ . 'terms_list', $links, $pt_cv_id ) );
-		}
+			if ( $post_terms ) {
+				if ( !isset( $pt_cv_glb[ 'item_terms' ] ) ) {
+					$pt_cv_glb[ 'item_terms' ] = array();
+				}
 
-		/**
-		 * Update post view count
-		 *
-		 * @param string $post_id ID of post
-		 */
-		static function post_update_view_count( $post_id ) {
-			$meta_key	 = PT_CV_META_VIEW_COUNT;
-			$count		 = get_post_meta( $post_id, $meta_key, true );
-			if ( !$count ) {
-				$count = 0;
-			}
-			$count ++;
-			update_post_meta( $post_id, $meta_key, $count );
-		}
-
-		/**
-		 * Get post view count
-		 *
-		 * @param string $post_id ID of post
-		 */
-		static function post_get_view_count( $post_id ) {
-			$meta_key	 = PT_CV_META_VIEW_COUNT;
-			$count		 = get_post_meta( $post_id, $meta_key, true );
-			if ( !$count ) {
-				$count = 1;
+				$pt_cv_glb[ 'item_terms' ][ $post_id ] = $post_terms;
 			}
 
-			return _n( 'view', 'views', $count, PT_CV_DOMAIN );
+			return apply_filters( PT_CV_PREFIX_ . 'post_terms_output', implode( ', ', $links ), $links, $taxonomy_terms );
 		}
 
 		/**
@@ -446,7 +519,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param string $arr Array of post data
 		 */
 		static function post_insert( $arr ) {
-			if ( !$arr ) {
+			if ( !isset( $arr[ 'ID' ] ) ) {
 				return;
 			}
 			// Create post object
@@ -454,7 +527,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 				'ID'			 => (int) $arr[ 'ID' ],
 				'post_type'		 => PT_CV_POST_TYPE,
 				'post_content'	 => '',
-				'post_title'	 => !empty( $arr[ 'title' ] ) ? $arr[ 'title' ] : __( '(no title)', PT_CV_DOMAIN ),
+				'post_title'	 => !empty( $arr[ 'title' ] ) ? $arr[ 'title' ] : __( '(no title)', 'content-views-query-and-display-post-page' ),
 				'post_status'	 => 'publish',
 			);
 
@@ -478,13 +551,16 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 
 			// Query view which has view id = $meta_id
 			$pt_query = new WP_Query(
-			array(
-				'post_type'		 => PT_CV_POST_TYPE,
-				'post_status'	 => 'publish',
-				'meta_key'		 => PT_CV_META_ID,
-				'meta_value'	 => esc_sql( $meta_id ),
-			)
+				array(
+				'suppress_filters'	 => true,
+				'post_type'			 => PT_CV_POST_TYPE,
+				'post_status'		 => 'publish',
+				'meta_key'			 => PT_CV_META_ID,
+				'meta_value'		 => cv_esc_sql( $meta_id ),
+				'cv_get_view'		 => true,
+				)
 			);
+
 			if ( $pt_query->have_posts() ) :
 				while ( $pt_query->have_posts() ):
 					$pt_query->the_post();
@@ -492,8 +568,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 				endwhile;
 			endif;
 
-			// Restore $wp_query and original Post Data
-			wp_reset_query();
+			self::reset_query();
 
 			return $post_id;
 		}
@@ -518,237 +593,154 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		static function _nonce_check( $nonce_name, $action_name ) {
 			$nonce_name = PT_CV_PREFIX_ . $nonce_name;
 			if ( !isset( $_POST[ $nonce_name ] ) || !wp_verify_nonce( $_POST[ $nonce_name ], PT_CV_PREFIX_ . $action_name ) ) {
-				print esc_html( __( 'Sorry, your nonce did not verify.', PT_CV_DOMAIN ) );
+				_e( 'Cheatin&#8217; uh?' );
 				exit;
 			}
 		}
 
 		/**
-		 * Get view data
+		 * Get view settings from view ID
 		 *
 		 * @param string $meta_id ID of custom field
 		 *
 		 * @return array
 		 */
-		static function view_get_settings( $meta_id ) {
+		static function view_get_settings( $meta_id, &$post_id = null ) {
 			if ( !$meta_id ) {
 				return;
 			}
 
-			$post_id = apply_filters( PT_CV_PREFIX_ . 'view_get_post_id', PT_CV_Functions::post_id_from_meta_id( $meta_id ), $meta_id );
+			do_action( PT_CV_PREFIX_ . 'get_view_settings' );
 
-			// Get view settings
+			$view_settings = array();
+
+			$post_id = PT_CV_Functions::post_id_from_meta_id( $meta_id );
 			if ( $post_id ) {
 				$view_settings = get_post_meta( $post_id, PT_CV_META_SETTINGS, true );
-
-				/* Backward compatibility
-				 * since 1.3.2
-				 */
-				self::view_backward_comp( $view_settings );
-
-				return is_array( $view_settings ) ? $view_settings : array();
 			}
 
-			return array();
+			return apply_filters( PT_CV_PREFIX_ . 'view_settings', $view_settings );
 		}
 
 		/**
-		 * Update values for some new options in new version (from options in old version)
+		 * Process view settings, return View output
 		 *
-		 * @param type $view_settings
+		 * @param string $view_id  View id
+		 * @param array  $settings Settings array
+		 * @param array  $pargs    Pagination settings
+		 * @param array  $sc_params    Shortcode parameters
+		 *
+		 * @return string View output
 		 */
-		static function view_backward_comp( &$view_settings ) {
-			if ( !$view_settings ) {
-				return $view_settings;
+		static function view_process_settings( $view_id, $settings, $pargs = array(), $sc_params = NULL ) {
+			if ( !defined( 'PT_CV_DOING_PREVIEW' ) && empty( $settings[ PT_CV_PREFIX . 'view-type' ] ) ) {
+				return sprintf( __( 'Error: View %s may not exist', 'content-views-query-and-display-post-page' ), "<strong>$view_id</strong>" );
 			}
 
-			// Taxonomy In, Not in
-			$taxonomies = isset( $view_settings[ PT_CV_PREFIX . 'taxonomy' ] ) ? $view_settings[ PT_CV_PREFIX . 'taxonomy' ] : array();
-			if ( is_array( $taxonomies ) ) {
-				$list = array( '__in', '__not_in' );
-				foreach ( $taxonomies as $taxonomy ) {
-					// Check if IN/NOT IN list has values. NOT IN list will overwite IN list
-					foreach ( $list as $ltype ) {
-						if ( isset( $view_settings[ PT_CV_PREFIX . $taxonomy . $ltype ] ) ) {
-							$view_settings[ PT_CV_PREFIX . $taxonomy . '-terms' ]	 = $view_settings[ PT_CV_PREFIX . $taxonomy . $ltype ];
-							$view_settings[ PT_CV_PREFIX . $taxonomy . '-operator' ] = ( $ltype == '__in' ) ? 'IN' : 'NOT IN';
+			do_action( PT_CV_PREFIX_ . 'view_process_start' );
+
+			global $pt_cv_glb, $pt_cv_id;
+
+			if ( !isset( $pt_cv_glb ) ) {
+				$pt_cv_glb = array();
+			}
+
+			$pt_cv_id				 = $view_id;
+			$pt_cv_glb[ $pt_cv_id ]	 = array();
+
+			$view_settings								 = array_map( 'cv_esc_sql', $settings );
+			$pt_cv_glb[ $pt_cv_id ][ 'view_settings' ]	 = $view_settings;
+
+			$content_type	 = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'content-type', $view_settings );
+			$view_type		 = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'view-type', $view_settings );
+			$view_type		 = apply_filters( PT_CV_PREFIX_ . 'view_layout', $view_type, $view_id, $view_settings, $sc_params );
+			$current_page	 = self::get_current_page( $pargs );
+
+			$pt_cv_glb[ $pt_cv_id ][ 'content_type' ]	 = $content_type;
+			$pt_cv_glb[ $pt_cv_id ][ 'view_type' ]		 = $view_type;
+			$pt_cv_glb[ $pt_cv_id ][ 'current_page' ]	 = $current_page;
+
+			# Important: store current View ID, prevent it from being modified when process posts which contains View shortcode
+			$cv_live_id = $view_id;
+
+			$rebuild = isset( $view_settings[ PT_CV_PREFIX . 'rebuild' ] ) ? $view_settings[ PT_CV_PREFIX . 'rebuild' ] : false;
+			$dargs	 = PT_CV_Functions::view_display_settings( $view_type, $dargs );
+			$args	 = $rebuild ? $rebuild : PT_CV_Functions::view_filter_settings( $content_type, $view_settings );
+
+			if ( $sc_params ) {
+				$view_settings[ PT_CV_PREFIX . 'shortcode_atts' ] = $sc_params;
+			} elseif ( isset( $view_settings[ PT_CV_PREFIX . 'shortcode_atts' ] ) ) {
+				$sc_params = $view_settings[ PT_CV_PREFIX . 'shortcode_atts' ];
+			}
+			$pt_cv_glb[ $pt_cv_id ][ 'shortcode_params' ] = $sc_params;
+
+			PT_CV_Functions::view_get_pagination_settings( $dargs, $args, $pargs );
+
+			$dargs								 = apply_filters( PT_CV_PREFIX_ . 'all_display_settings', $dargs );
+			$args								 = apply_filters( PT_CV_PREFIX_ . 'query_parameters', $args );
+			$pt_cv_glb[ $pt_cv_id ][ 'dargs' ]	 = $dargs;
+			$pt_cv_glb[ $pt_cv_id ][ 'args' ]	 = $args;
+			do_action( PT_CV_PREFIX_ . 'add_global_variables' );
+
+			// Validate settings, if some required parameters are missing, show error and exit
+			$error = !$rebuild ? apply_filters( PT_CV_PREFIX_ . 'validate_settings', array(), $args ) : false;
+			if ( $error ) {
+				return ( implode( '</p><p>', $error ) );
+			}
+
+			$content_items	 = $pt_query		 = $empty_result	 = null;
+
+			// What kind of content to display
+			$pt_cv_glb[ $pt_cv_id ][ 'display_what' ] = apply_filters( PT_CV_PREFIX_ . 'display_what', 'post' );
+			if ( $pt_cv_glb[ $pt_cv_id ][ 'display_what' ] === 'post' ) {
+				extract( self::get_posts_list( $args, $view_type ) );
+			} else {
+				$content_items = apply_filters( PT_CV_PREFIX_ . 'view_content', array() );
+			}
+
+			$pt_cv_id = $cv_live_id;
+
+			if ( apply_filters( PT_CV_PREFIX_ . 'hide_empty_result', false ) && $empty_result ) {
+				$html = '';
+			} else {
+				// Wrap items
+				$html = PT_CV_Html::content_items_wrap( $content_items, $current_page, $args[ 'posts_per_page' ], $pt_cv_id );
+
+				// Show pagination
+				if ( $pt_query && apply_filters( PT_CV_PREFIX_ . 'show_pagination', PT_CV_Functions::nonajax_or_firstpage( $dargs, $current_page ) ) ) {
+					// Total post founds
+					$found_posts = (int) apply_filters( PT_CV_PREFIX_ . 'found_posts', $pt_query->found_posts );
+
+					// Total number of items
+					$total_items = ( $args[ 'limit' ] > 0 && $found_posts > $args[ 'limit' ] ) ? $args[ 'limit' ] : $found_posts;
+					$total_items = apply_filters( PT_CV_PREFIX_ . 'total_posts', $total_items );
+
+					// Total number of pages
+					$items_per_page	 = (int) PT_CV_Functions::setting_value( PT_CV_PREFIX . 'pagination-items-per-page', $view_settings );
+					$max_num_pages	 = ceil( $total_items / $items_per_page );
+					$max_num_pages	 = (int) $max_num_pages;
+
+					$pt_cv_glb[ $pt_cv_id ][ 'pagination_info' ] = compact( "total_items", "max_num_pages", "current_page" );
+
+					// Output pagination
+					if ( $max_num_pages > 1 ) {
+						if ( $dargs[ 'pagination-settings' ][ 'type' ] === 'ajax' ) {
+							cv_comp_pagination_settings( 'set', $view_settings );
+						}
+
+						$html .= "\n" . PT_CV_Html::pagination_output( $max_num_pages, $current_page, $pt_cv_id );
+					} else {
+						if ( $max_num_pages == 1 && defined( 'PT_CV_DOING_PREVIEW' ) ) {
+							$reason = sprintf( '%s %s', ($total_items == $found_posts) ? __( 'the number of results', 'content-views-query-and-display-post-page' ) : __( 'the <b>Limit</b> value', 'content-views-query-and-display-post-page' ), __( 'is less than or equal to (&le;) the <b>Items per page</b> value', 'content-views-query-and-display-post-page' ) );
+							$html .= "\n" . sprintf( '<p class="alert alert-warning" style="padding: 10px 5px">%s %s.</p>', __( '[Preview only] Pagination is disabled when there is only 1 page, because of', 'content-views-query-and-display-post-page' ), $reason );
 						}
 					}
 				}
 			}
 
-			$view_settings = apply_filters( PT_CV_PREFIX_ . 'backward_comp', $view_settings );
-		}
+			do_action( PT_CV_PREFIX_ . 'view_process_end' );
 
-		/**
-		 * Process view $settings array, return HTML output
-		 *
-		 * @param string $id       The current view id
-		 * @param array  $settings The settings array
-		 * @param array  $pargs    The pagination settings array
-		 *
-		 * @return string HTML output of Content View
-		 */
-		static function view_process_settings( $id, $settings, $pargs = array() ) {
-			if ( empty( $settings ) ) {
-				return __( 'Empty settings', PT_CV_DOMAIN );
-			}
-
-			global $pt_cv_glb, $pt_cv_id;
-			if ( !is_array( $pt_cv_glb ) )
-				$pt_cv_glb	 = array();
-			if ( !isset( $pt_cv_glb ) )
-				$pt_cv_id	 = 0;
-
-			$view_id = !empty( $id ) ? $id : PT_CV_Functions::string_random();
-
-			// Init arrays
-			if ( !isset( $pt_cv_glb[ $view_id ] ) ) {
-				$pt_cv_glb[ $view_id ] = array();
-			}
-			if ( !isset( $pt_cv_glb[ 'processed_view' ] ) ) {
-				$pt_cv_glb[ 'processed_view' ] = array();
-			}
-
-			/**
-			 * 1. Get View settings
-			 */
-			$view_settings = array();
-			foreach ( $settings as $key => $value ) {
-				$view_settings[ $key ] = esc_sql( $value );
-			}
-			$pt_cv_glb[ $view_id ][ 'view_settings' ] = $view_settings;
-
-			// Check duplicated View
-			// (Same View ID but different shortcode parameters => consider as 2 different Views)
-			if ( empty( $pargs ) && apply_filters( PT_CV_PREFIX_ . 'check_duplicate', 0, $view_id, $view_settings ) ) {
-				$sc_params	 = isset( $pt_cv_glb[ $view_id ][ 'shortcode_params' ] ) ? $pt_cv_glb[ $view_id ][ 'shortcode_params' ] : PT_CV_Functions::string_random();
-				$vid		 = $view_id . '-' . md5( serialize( $sc_params ) );
-				if ( !empty( $pt_cv_glb[ 'processed_view' ][ $vid ] ) ) {
-					return '';
-				} else {
-					$pt_cv_glb[ 'processed_view' ][ $vid ] = 1;
-				}
-			}
-
-			// Get content type
-			$content_type							 = apply_filters( PT_CV_PREFIX_ . 'content_type', PT_CV_Functions::setting_value( PT_CV_PREFIX . 'content-type', $view_settings ), $id );
-			$pt_cv_glb[ $view_id ][ 'content_type' ] = $content_type;
-
-			// Get view type
-			$view_type								 = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'view-type', $view_settings );
-			$pt_cv_glb[ $view_id ][ 'view_type' ]	 = $view_type;
-
-			// Get session id, not empty if is pagination request
-			$session_id = ( $pargs && isset( $pargs[ 'session_id' ] ) ) ? $pargs[ 'session_id' ] : 0;
-
-			// Store main View ID
-			// If parent View is not finished
-			if ( !isset( $pt_cv_glb[ $pt_cv_id ][ 'finished' ] ) ) {
-				$pt_cv_main_id = !empty( $pt_cv_id ) ? $pt_cv_id : $view_id;
-			} else {
-				$pt_cv_main_id = $view_id;
-			}
-
-			// If is pagination request
-			if ( $session_id ) {
-				if ( empty( $pt_cv_id ) ) {
-					$pt_cv_id = $session_id;
-				}
-
-				$saved_settings = isset( $_SESSION[ PT_CV_PREFIX . 'view-data-' . $session_id ] ) ? $_SESSION[ PT_CV_PREFIX . 'view-data-' . $session_id ] : array();
-
-				$session_data = array_merge(
-				array( '$args' => '', '$dargs' => '' ), $saved_settings
-				);
-
-				$args	 = $session_data[ '$args' ];
-				$dargs	 = $session_data[ '$dargs' ];
-			} else {
-				// Assign view id as current View
-				$pt_cv_id	 = $session_id	 = $view_id;
-
-				// Store settings
-				$_SESSION[ PT_CV_PREFIX . 'view-settings-' . $session_id ] = $settings;
-			}
-
-			// Extract Query & Display settings from settings array
-			if ( empty( $args ) || empty( $dargs ) ) {
-				$dargs	 = apply_filters( PT_CV_PREFIX_ . 'all_display_settings', PT_CV_Functions::view_display_settings( $view_type, $dargs ) );
-				$args	 = apply_filters( PT_CV_PREFIX_ . 'query_parameters', PT_CV_Functions::view_filter_settings( $content_type, $view_settings ) );
-
-				// Store view data
-				$_SESSION[ PT_CV_PREFIX . 'view-data-' . $session_id ] = array(
-					'$args'	 => $args,
-					'$dargs' => $dargs,
-				);
-			}
-
-			// Unlock Session
-			session_write_close();
-
-			// Pagination settings
-			PT_CV_Functions::view_get_pagination_settings( $dargs, $args, $pargs );
-
-			// Update global query parameters variable
-			$pt_cv_glb[ $view_id ][ 'dargs' ]	 = $dargs;
-			$pt_cv_glb[ $view_id ][ 'args' ]	 = $args;
-			do_action( PT_CV_PREFIX_ . 'add_global_variables' );
-
-			// Validate settings, if some required parameters are missing, show error and exit
-			$error = apply_filters( PT_CV_PREFIX_ . 'validate_settings', array(), $args );
-
-			// Return error message
-			if ( $error ) {
-				return ( implode( '</p><p>', $error ) );
-			}
-
-			/**
-			 * 2. Output Items
-			 */
-			$pt_query = array();
-
-			// What kind of content to display
-			$pt_cv_glb[ $view_id ][ 'display_what' ] = apply_filters( PT_CV_PREFIX_ . 'display_what', 'post' );
-
-			if ( $pt_cv_glb[ $view_id ][ 'display_what' ] === 'post' ) {
-				// Display posts
-				// Get $content_items & $pt_query
-				extract( self::get_posts_list( $args, $view_type ) );
-			} else {
-				// Display categories...
-				$content_items = apply_filters( PT_CV_PREFIX_ . 'view_content', array() );
-			}
-
-			// Restore main View id
-			$pt_cv_id = $pt_cv_main_id;
-
-			/**
-			 * 3. Output Pagination
-			 */
-			$current_page	 = self::get_current_page( $pargs );
-			$html			 = PT_CV_Html::content_items_wrap( $content_items, $current_page, $args[ 'posts_per_page' ], $view_id );
-
-			// Append Pagination HTML if this is first page, or not Ajax calling
-			if ( $pt_query && $args[ 'posts_per_page' ] > 0 && PT_CV_Functions::is_pagination( $dargs, $current_page ) ) {
-				// Total post founds
-				$found_posts = apply_filters( PT_CV_PREFIX_ . 'found_posts', $pt_query->found_posts );
-
-				// Total number of items
-				$total_items = ( $args[ 'limit' ] > 0 && $found_posts > $args[ 'limit' ] ) ? $args[ 'limit' ] : $found_posts;
-
-				// Total number of pages
-				$max_num_pages = ceil( $total_items / $args[ 'posts_per_page' ] );
-
-				// Output pagination
-				$current_page = apply_filters( PT_CV_PREFIX_ . 'active_page', $current_page, $max_num_pages, $pt_cv_id );
-				$html .= "\n" . PT_CV_Html::pagination_output( $max_num_pages, $current_page, $session_id );
-			}
-
-			// Reset View ID
-			$pt_cv_glb[ $pt_cv_id ][ 'finished' ] = 1;
-
-			return $html;
+			return apply_filters( PT_CV_PREFIX_ . 'view_html', $html );
 		}
 
 		/**
@@ -760,46 +752,46 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @return array
 		 */
 		static function get_posts_list( $args, $view_type ) {
-			// Store HTML output of each item
-			$content_items = array();
+			$empty_result	 = false;
+			$content_items	 = array();
+			$args			 = apply_filters( PT_CV_PREFIX_ . 'query_params', $args );
 
 			// The Query
 			do_action( PT_CV_PREFIX_ . 'before_query' );
-
 			$pt_query = new WP_Query( $args );
+			do_action( PT_CV_PREFIX_ . 'after_query', $pt_query->request );
 
 			//DEBUG_QUERY
 			//print_r( $pt_query->request );
-
-			do_action( PT_CV_PREFIX_ . 'after_query' );
-
 			// The Loop
 			if ( $pt_query->have_posts() ) {
+				do_action( PT_CV_PREFIX_ . 'before_process_item' );
+
+				$all_posts	 = array();
+				$post_idx	 = 0;
 				while ( $pt_query->have_posts() ) {
 					$pt_query->the_post();
 					global $post;
 
-					// Output HTML for this item
-					$_post = apply_filters( PT_CV_PREFIX_ . 'show_this_post', $post );
-					if ( $_post ) {
-						$content_items[ $post->ID ] = PT_CV_Html::view_type_output( $view_type, $post );
+					if ( apply_filters( PT_CV_PREFIX_ . 'show_this_post', $post ) ) {
+						$content_items[ $post->ID ]	 = PT_CV_Html::view_type_output( $view_type, $post, $post_idx++ );
+						$all_posts[ $post->ID ]		 = $post;
 					}
 				}
+				$GLOBALS[ 'cv_posts' ] = $all_posts;
+
+				do_action( PT_CV_PREFIX_ . 'after_process_item' );
 			} else {
-				// Get no post found class
-				$_class = apply_filters( PT_CV_PREFIX_ . 'content_no_post_found_class', 'alert alert-warning' );
-
-				// Get no post found text
-				$_text = apply_filters( PT_CV_PREFIX_ . 'content_no_post_found_text', __( 'No post found', PT_CV_DOMAIN ) );
-
-				// Output HTML
-				$content_items[] = sprintf( '<div class="%1$s">%2$s</div>', esc_attr( $_class ), balanceTags( $_text ) );
+				$_class			 = apply_filters( PT_CV_PREFIX_ . 'content_no_post_found_class', 'alert alert-warning ' . PT_CV_PREFIX . 'no-post' );
+				$_text			 = PT_CV_Html::no_post_found();
+				$content_items[] = sprintf( '<div class="%s">%s</div>', esc_attr( $_class ), $_text );
+				$empty_result	 = true;
+				PT_CV_Functions::set_global_variable( 'no_post_found', $empty_result );
 			}
 
-			// Restore $wp_query and original Post Data
-			wp_reset_query();
+			self::reset_query();
 
-			return array( 'content_items' => apply_filters( PT_CV_PREFIX_ . 'content_items', $content_items, $view_type ), 'pt_query' => $pt_query );
+			return array( 'content_items' => apply_filters( PT_CV_PREFIX_ . 'content_items', $content_items, $view_type ), 'pt_query' => $pt_query, 'empty_result' => $empty_result );
 		}
 
 		/**
@@ -816,37 +808,37 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 			 * Set default values
 			 */
 			$args = array(
-				'post_type'				 => $content_type,
-				'post_status'			 => 'publish',
-				'ignore_sticky_posts'	 => apply_filters( PT_CV_PREFIX_ . 'ignore_sticky_posts', 1 ),
+				'post_type'		 => apply_filters( PT_CV_PREFIX_ . 'post_type', $content_type ),
+				'post_status'	 => apply_filters( PT_CV_PREFIX_ . 'post_status', array( 'publish' ) ),
+				'post__not_in'	 => array(),
 			);
 
-			// Post in
-			if ( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post__in', $view_settings ) ) {
-				$post_in			 = PT_CV_Functions::string_to_array( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post__in', $view_settings ) );
-				$args[ 'post__in' ]	 = array_map( 'intval', array_filter( $post_in ) );
+			// Ignore sticky posts
+			$args[ 'ignore_sticky_posts' ] = apply_filters( PT_CV_PREFIX_ . 'ignore_sticky_posts', 1 );
+
+			$post_in = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post__in', $view_settings );
+			$post_in = array_filter( PT_CV_Functions::string_to_array( $post_in ) );
+			if ( $post_in ) {
+				$args[ 'post__in' ] = array_map( 'intval', $post_in );
 			}
 
-			// Post not in
-			if ( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post__not_in', $view_settings ) ) {
-				$post_not_in			 = PT_CV_Functions::string_to_array( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post__not_in', $view_settings ) );
-				$args[ 'post__not_in' ]	 = array_map( 'intval', array_filter( $post_not_in ) );
+			$post_not_in = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post__not_in', $view_settings );
+			$post_not_in = array_filter( PT_CV_Functions::string_to_array( $post_not_in ) );
+			if ( $post_not_in ) {
+				$args[ 'post__not_in' ] = array_map( 'intval', $post_not_in );
 			}
-
-			$args[ 'post__not_in' ] = apply_filters( PT_CV_PREFIX_ . 'post__not_in', isset( $args[ 'post__not_in' ] ) ? $args[ 'post__not_in' ] : array(), $view_settings );
+			$args[ 'post__not_in' ] = apply_filters( PT_CV_PREFIX_ . 'post__not_in', $args[ 'post__not_in' ], $view_settings );
 
 			// Parent page
-			if ( $content_type == 'page' ) {
+			if ( in_array( $content_type, apply_filters( PT_CV_PREFIX_ . 'hierarchical_post_type', array( 'page' ) ) ) ) {
 				$post_parent = apply_filters( PT_CV_PREFIX_ . 'post_parent_id', PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post_parent', $view_settings ) );
 				if ( !empty( $post_parent ) ) {
 					$args[ 'post_parent' ] = (int) $post_parent;
 				}
 			}
 
-			// Force suppress filters
 			$args[ 'suppress_filters' ] = true;
 
-			// Advance settings
 			PT_CV_Functions::view_get_advanced_settings( $args, $content_type );
 
 			return $args;
@@ -873,8 +865,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 			// View type settings
 			$dargs[ 'view-type-settings' ] = PT_CV_Functions::settings_values_by_prefix( PT_CV_PREFIX . $view_type . '-' );
 
-			global $pt_cv_glb, $pt_cv_id;
-			$pt_cv_glb[ $pt_cv_id ][ 'dargs' ] = $dargs;
+			PT_CV_Functions::set_global_variable( 'dargs', $dargs );
 
 			return $dargs;
 		}
@@ -886,128 +877,96 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param string $content_type The content type
 		 */
 		static function view_get_advanced_settings( &$args, $content_type ) {
+			$view_settings		 = PT_CV_Functions::get_global_variable( 'view_settings' );
+			$advanced_settings	 = (array) PT_CV_Functions::setting_value( PT_CV_PREFIX . 'advanced-settings', $view_settings );
 
-			$view_settings = PT_CV_Functions::get_global_variable( 'view_settings' );
-
-			$advanced_settings = (array) PT_CV_Functions::setting_value( PT_CV_PREFIX . 'advanced-settings', $view_settings );
 			if ( $advanced_settings ) {
 				foreach ( $advanced_settings as $setting ) {
 					switch ( $setting ) {
 
-						// Author
 						case 'author':
-							$author_in = PT_CV_Functions::string_to_array( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'author__in', $view_settings ) );
+							$wp37			 = PT_CV_Functions::wp_version_compare( '3.7' );
+							$author_in		 = array_filter( PT_CV_Functions::string_to_array( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'author__in', $view_settings ) ) );
+							$author_not_in	 = array_filter( PT_CV_Functions::string_to_array( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'author__not_in', $view_settings ) ) );
 
-							// Check if using Wordpress version 3.7 or higher
-							$version_gt_37 = PT_CV_Functions::wp_version_compare( '3.7' );
+							if ( $author_in ) {
+								$args = array_merge(
+									$args, $wp37 ? array( 'author__in' => array_map( 'intval', $author_in ) ) : array( 'author' => intval( $author_in[ 0 ] ) )
+								);
+							}
 
-							if ( $version_gt_37 ) {
-								$author_not_in = PT_CV_Functions::string_to_array( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'author__not_in', $view_settings ) );
-
-								// Author in
-								if ( !empty( $author_in[ 0 ] ) ) {
-									$args = array_merge(
-									$args, array(
-										'author__in' => array_map( 'intval', $author_in ),
-									)
-									);
-								}
-
-								// Author not in
-								if ( !empty( $author_not_in[ 0 ] ) ) {
-									$args = array_merge(
-									$args, array(
-										'author__not_in' => array_map( 'intval', $author_not_in ),
-									)
-									);
-								}
-							} else {
-								// Author = ID
-								if ( !empty( $author_in[ 0 ] ) ) {
-									$args = array_merge(
-									$args, array(
-										'author' => intval( $author_in[ 0 ] ),
-									)
-									);
-								}
+							if ( $author_not_in && $wp37 ) {
+								$args = array_merge(
+									$args, array( 'author__not_in' => array_map( 'intval', $author_not_in ) )
+								);
 							}
 
 							break;
 
-						// Status
 						case 'status':
 							$status	 = PT_CV_Functions::string_to_array( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'post_status', $view_settings, 'publish' ) );
 							$args	 = array_merge(
-							$args, array(
+								$args, array(
 								'post_status' => apply_filters( PT_CV_PREFIX_ . 'post_status', $status ),
-							)
+								)
 							);
 							break;
 
-						// Search
 						case 'search':
-							if ( PT_CV_Functions::setting_value( PT_CV_PREFIX . 's', $view_settings ) ) {
+							if ( $search_val = PT_CV_Functions::setting_value( PT_CV_PREFIX . 's', $view_settings ) ) {
 								$args = array_merge(
-								$args, array(
-									's' => PT_CV_Functions::setting_value( PT_CV_PREFIX . 's', $view_settings ),
-								)
+									$args, array(
+									's' => $search_val,
+									)
 								);
 							}
 							break;
 
-						// Taxonomy
 						case 'taxonomy':
-							// No taxonomy found
-							if ( !PT_CV_Functions::setting_value( PT_CV_PREFIX . 'taxonomy', $view_settings ) ) {
+							$taxonomies = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'taxonomy', $view_settings );
+							if ( !$taxonomies ) {
 								break;
 							}
 
-							// All settings of taxonomies
-							$taxonomy_setting = array();
-
-							// Selected taxonomies
-							$taxonomies = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'taxonomy', $view_settings );
-
-							// Get Terms & criterias (In, Not in)
+							$tax_settings = array();
 							foreach ( $taxonomies as $taxonomy ) {
-								if ( PT_CV_Functions::setting_value( PT_CV_PREFIX . $taxonomy . '-terms', $view_settings ) ) {
-									// Get operator
+								$terms	 = (array) PT_CV_Functions::setting_value( PT_CV_PREFIX . $taxonomy . '-terms', $view_settings );
+								$terms	 = apply_filters( PT_CV_PREFIX_ . 'selected_terms', $terms, $taxonomy );
+								if ( $terms ) {
 									$operator = PT_CV_Functions::setting_value( PT_CV_PREFIX . $taxonomy . '-operator', $view_settings, 'IN' );
+									if ( $operator === 'AND' && count( $terms ) == 1 ) {
+										$operator = 'IN';
+									}
 
-									$taxonomy_setting[] = array(
+									$tax_settings[] = array(
 										'taxonomy'			 => $taxonomy,
 										'field'				 => 'slug',
-										'terms'				 => (array) PT_CV_Functions::setting_value( PT_CV_PREFIX . $taxonomy . '-terms', $view_settings ),
+										'terms'				 => $terms,
 										'operator'			 => $operator,
-										'include_children'	 => apply_filters( PT_CV_PREFIX_ . 'include_children', true )
+										/**
+										 * @since 1.7.2
+										 * Bug: "No post found" when one of selected terms is hierarchical & operator is AND
+										 */
+										'include_children'	 => apply_filters( PT_CV_PREFIX_ . 'include_children', $operator == 'AND' ? false : true  )
 									);
 								}
 							}
 
-							// Get Taxonomy relation if there are more than 1 selected taxonomies | set In & Not in of a taxonomy
-							if ( count( $taxonomies ) > 1 || count( $taxonomy_setting ) > 1 ) {
-								$taxonomy_setting[ 'relation' ] = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'taxonomy-relation', $view_settings, 'AND' );
+							if ( count( $tax_settings ) > 1 ) {
+								$tax_settings[ 'relation' ] = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'taxonomy-relation', $view_settings, 'AND' );
 							}
 
-							// Filter taxonomy with Custom post types
-							$taxonomy_setting_ = apply_filters( PT_CV_PREFIX_ . 'taxonomy_setting', $taxonomy_setting );
-
-							$args = array_merge( $args, array( 'tax_query' => $taxonomy_setting_ ) );
+							$args = array_merge( $args, array( 'tax_query' => apply_filters( PT_CV_PREFIX_ . 'taxonomy_setting', $tax_settings ) ) );
 							break;
 
-						// Order
 						case 'order':
-							$order_settings = apply_filters(
-							PT_CV_PREFIX_ . 'order_setting', array(
-								'orderby'	 => PT_CV_Functions::setting_value( PT_CV_PREFIX . 'orderby', $view_settings ),
-								'order'		 => PT_CV_Functions::setting_value( PT_CV_PREFIX . 'order', $view_settings ),
-							)
-							);
-
-							$args = array_merge( $args, $order_settings );
-							break;
-
-						default:
+							$orderby		 = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'orderby', $view_settings );
+							$order			 = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'order', $view_settings );
+							$order_settings	 = apply_filters( PT_CV_PREFIX_ . 'order_setting', array(
+								'orderby'	 => $orderby,
+								'order'		 => $orderby ? $order : '',
+								) );
+							$args			 = array_merge( $args, $order_settings );
 							break;
 					}
 				}
@@ -1020,37 +979,20 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param array $dargs The settings array of Fields
 		 */
 		static function view_get_display_settings( &$dargs ) {
+			$view_settings	 = PT_CV_Functions::get_global_variable( 'view_settings' );
+			$view_type		 = $dargs[ 'view-type' ];
 
-			$view_settings = PT_CV_Functions::get_global_variable( 'view_settings' );
-
-			$view_type = $dargs[ 'view-type' ];
-
-			/**
-			 * Layout format
-			 */
-			$dargs[ 'layout-format' ] = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'layout-format', $view_settings );
-
-			/**
-			 * Columns count & Rows count
-			 */
+			$dargs[ 'layout-format' ]	 = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'layout-format', $view_settings );
 			$dargs[ 'number-columns' ]	 = apply_filters( PT_CV_PREFIX_ . 'item_per_row', PT_CV_Functions::setting_value( PT_CV_PREFIX . $view_type . '-' . 'number-columns', $view_settings, 1 ) );
 			$dargs[ 'number-rows' ]		 = PT_CV_Functions::setting_value( PT_CV_PREFIX . $view_type . '-' . 'number-rows', $view_settings, 1 );
 
-			/**
-			 * Fields settings
-			 */
 			$cfields_settings	 = PT_CV_Functions::settings_values_by_prefix( PT_CV_PREFIX . 'show-field-' );
 			$cfields			 = (array) array_keys( (array) $cfields_settings );
 			foreach ( $cfields as $field ) {
-				// If show this field
 				if ( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'show-field-' . $field, $view_settings ) ) {
-					// Add this field to display fields list
 					$dargs[ 'fields' ][] = $field;
 
-					// Get field settings
 					switch ( $field ) {
-
-						// Get title settings
 						case 'title':
 							$prefix			 = PT_CV_PREFIX . 'field-title-';
 							$field_setting	 = PT_CV_Functions::settings_values_by_prefix( $prefix );
@@ -1059,7 +1001,6 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 
 							break;
 
-						// Get thumbnail settings
 						case 'thumbnail':
 							$prefix			 = PT_CV_PREFIX . 'field-thumbnail-';
 							$field_setting	 = PT_CV_Functions::settings_values_by_prefix( $prefix );
@@ -1068,7 +1009,6 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 
 							break;
 
-						// Get meta fields settings
 						case 'meta-fields':
 							$prefix			 = PT_CV_PREFIX . 'meta-fields-';
 							$field_setting	 = PT_CV_Functions::settings_values_by_prefix( $prefix );
@@ -1077,7 +1017,6 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 
 							break;
 
-						// Get content settings
 						case 'content':
 							$prefix			 = PT_CV_PREFIX . 'field-content-';
 							$field_setting	 = PT_CV_Functions::settings_values_by_prefix( $prefix );
@@ -1088,9 +1027,6 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 
 							$dargs[ 'field-settings' ][ $field ] = apply_filters( PT_CV_PREFIX_ . 'field_content_setting_values', $field_setting, $prefix );
 
-							break;
-
-						default:
 							break;
 					}
 				}
@@ -1105,48 +1041,41 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param array $pargs The pagination settings array
 		 */
 		static function view_get_pagination_settings( &$dargs, &$args, $pargs ) {
-
-			$view_settings = PT_CV_Functions::get_global_variable( 'view_settings' );
-
-			// Get Limit value
+			$view_settings				 = PT_CV_Functions::get_global_variable( 'view_settings' );
 			$limit						 = trim( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'limit', $view_settings ) );
-			$limit						 = ( empty( $limit ) || $limit === '-1' ) ? 10000000 : (int) $limit;
+			$limit						 = ( empty( $limit ) || $limit === '-1' ) ? 10000000 : $limit;
+			$limit						 = (int) apply_filters( PT_CV_PREFIX_ . 'settings_args_limit', $limit );
 			$args[ 'limit' ]			 = $args[ 'posts_per_page' ]	 = $limit;
 			$offset						 = 0;
 
-			// Get pagination enable/disable
 			$pagination = PT_CV_Functions::setting_value( PT_CV_PREFIX . 'enable-pagination', $view_settings );
 			if ( $pagination ) {
-				$prefix			 = PT_CV_PREFIX . 'pagination-';
-				$field_setting	 = PT_CV_Functions::settings_values_by_prefix( $prefix );
-
-				$dargs[ 'pagination-settings' ] = apply_filters( PT_CV_PREFIX_ . 'pagination_settings', $field_setting, $prefix );
-
-				// If Items per page is set, get its value
-				$posts_per_page = isset( $dargs[ 'pagination-settings' ][ 'items-per-page' ] ) ? (int) $dargs[ 'pagination-settings' ][ 'items-per-page' ] : $limit;
-
-				if ( $posts_per_page > $limit ) {
-					$posts_per_page = $limit;
+				$prefix							 = PT_CV_PREFIX . 'pagination-';
+				$field_setting					 = PT_CV_Functions::settings_values_by_prefix( $prefix );
+				$dargs[ 'pagination-settings' ]	 = apply_filters( PT_CV_PREFIX_ . 'pagination_settings', $field_setting, $prefix );
+				if ( !isset( $dargs[ 'pagination-settings' ][ 'type' ] ) ) {
+					$dargs[ 'pagination-settings' ][ 'type' ] = 'ajax';
 				}
 
-				// Set 'posts_per_page' parameter
-				$args[ 'posts_per_page' ] = $posts_per_page;
+				if ( $dargs[ 'pagination-settings' ][ 'type' ] === 'normal' ) {
+					$dargs[ 'pagination-settings' ][ 'style' ] = '';
+				}
 
-				// Get offset
-				$paged = self::get_current_page( $pargs );
+				$ppp = isset( $dargs[ 'pagination-settings' ][ 'items-per-page' ] ) ? (int) $dargs[ 'pagination-settings' ][ 'items-per-page' ] : $limit;
+				if ( $ppp > $limit ) {
+					$ppp = $limit;
+				}
+				$args[ 'posts_per_page' ] = $ppp;
 
-				$offset = $posts_per_page * ( (int) $paged - 1 );
-
-				// Update posts_per_page
+				$paged	 = (int) self::get_current_page( $pargs );
+				$offset	 = $ppp * ( $paged - 1 );
 				if ( intval( $args[ 'posts_per_page' ] ) > $limit - $offset ) {
 					$args[ 'posts_per_page' ] = $limit - $offset;
 				}
 			}
 
-			$offset = apply_filters( PT_CV_PREFIX_ . 'settings_args_offset', $offset );
-
-			// Set 'offset' parameter
-			$args[ 'offset' ] = $offset;
+			$args[ 'offset' ]			 = apply_filters( PT_CV_PREFIX_ . 'settings_args_offset', $offset );
+			$args[ 'by_contentviews' ]	 = true;
 		}
 
 		/**
@@ -1155,10 +1084,9 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param array $dargs The settings array of Fields
 		 */
 		static function view_get_other_settings( &$dargs ) {
-			$prefix			 = PT_CV_PREFIX . 'other-';
-			$field_setting	 = PT_CV_Functions::settings_values_by_prefix( $prefix );
-
-			$dargs[ 'other-settings' ] = apply_filters( PT_CV_PREFIX_ . 'other_settings', $field_setting );
+			$prefix						 = PT_CV_PREFIX . 'other-';
+			$field_setting				 = PT_CV_Functions::settings_values_by_prefix( $prefix );
+			$dargs[ 'other-settings' ]	 = apply_filters( PT_CV_PREFIX_ . 'other_settings', $field_setting );
 		}
 
 		/**
@@ -1173,41 +1101,31 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 
 			PT_CV_Functions::_nonce_check( 'form_nonce', 'view_submit' );
 
-			/**
-			 * INSERT VIEW
-			 */
-			// View title
-			$title = esc_sql( $_POST[ PT_CV_PREFIX . 'view-title' ] );
-
-			// Current post id ( 0 if new view )
-			$cur_post_id = esc_sql( $_POST[ PT_CV_PREFIX . 'post-id' ] );
-
-			// Insert post
-			if ( !$cur_post_id ) {
-				$post_id = PT_CV_Functions::post_insert( array( 'ID' => $cur_post_id, 'title' => $title ) );
+			// Insert View
+			$title	 = cv_esc_sql( $_POST[ PT_CV_PREFIX . 'view-title' ] );
+			$cur_pid = cv_esc_sql( $_POST[ PT_CV_PREFIX . 'post-id' ] );
+			if ( !$cur_pid ) {
+				$post_id = PT_CV_Functions::post_insert( array( 'ID' => 0, 'title' => $title ) );
 			} else {
-				$post_id = $cur_post_id;
+				$post_id = absint( $cur_pid );
 			}
 
-			/**
-			 * ADD/UPDATE CUSTOM FIELDS
-			 */
-			// Get current view id, = 0 if it is new view
-			$cur_view_id = esc_sql( $_POST[ PT_CV_PREFIX . 'view-id' ] );
-			$view_id	 = empty( $cur_view_id ) ? PT_CV_Functions::string_random() : $cur_view_id;
+			// Add/Update View data
+			$view_id = empty( $_POST[ PT_CV_PREFIX . 'view-id' ] ) ? PT_CV_Functions::string_random() : cv_sanitize_vid( $_POST[ PT_CV_PREFIX . 'view-id' ] );
 			update_post_meta( $post_id, PT_CV_META_ID, $view_id );
-			update_post_meta( $post_id, PT_CV_META_SETTINGS, (array) $_POST );
+			update_post_meta( $post_id, PT_CV_META_SETTINGS, $_POST );
 
-			// Update post title
+			// Update View title
 			if ( strpos( $title, '[ID:' ) === false ) {
 				PT_CV_Functions::post_insert( array( 'ID' => $post_id, 'title' => sprintf( '%s [ID: %s]', $title, $view_id ) ) );
 			}
 
-			/**
-			 * redirect to edit page
-			 */
 			$edit_link = PT_CV_Functions::view_link( $view_id );
-			wp_redirect( $edit_link );
+			?>
+			<script type="text/javascript">
+				window.location = '<?php echo $edit_link; ?>';
+			</script>
+			<?php
 			exit;
 		}
 
@@ -1217,34 +1135,30 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param array  $atts    Array of setting parameters for shortcode
 		 * @param string $content Content of shortcode
 		 */
-		static function view_output( $atts, $content = '' ) {
-			$atts = shortcode_atts(
-			apply_filters(
-			PT_CV_PREFIX_ . 'shortcode_params', array(
-				'id' => 0,
-			)
-			), $atts
-			);
+		static function view_output( $atts ) {
+			$atts	 = shortcode_atts( apply_filters( PT_CV_PREFIX_ . 'shortcode_params', array( 'id' => 0 ) ), $atts );
+			$id		 = cv_sanitize_vid( $atts[ 'id' ] );
+			if ( $id && !self::duplicated_process( $id, $atts ) ) {
+				# Backup the global post, ensure this happens only one time per page
+				if ( !isset( $GLOBALS[ 'cv_gpost_bak' ] ) && isset( $GLOBALS[ 'post' ] ) ) {
+					$GLOBALS[ 'cv_gpost_bak' ] = $GLOBALS[ 'post' ];
+				}
 
-			// View meta id
-			$id = esc_sql( $atts[ 'id' ] );
+				$result = apply_filters( PT_CV_PREFIX_ . 'view_shortcode_output', null, $atts );
+				if ( empty( $result ) ) {
+					$settings	 = PT_CV_Functions::view_get_settings( $id );
+					$view_html	 = PT_CV_Functions::view_process_settings( $id, $settings, null, $atts );
+					$result		 = PT_CV_Functions::view_final_output( $view_html );
+					do_action( PT_CV_PREFIX_ . 'flushed_output', $result );
+				}
 
-			if ( !$id )
-				return 'No view ID';
+				# Restore the global post
+				if ( isset( $GLOBALS[ 'cv_gpost_bak' ] ) ) {
+					$GLOBALS[ 'post' ] = $GLOBALS[ 'cv_gpost_bak' ];
+				}
 
-			// View shortcode parameters
-			global $pt_cv_glb, $pt_cv_sub_id;
-			$pt_cv_glb[ $id ]						 = array();
-			$pt_cv_glb[ $id ][ 'shortcode_params' ]	 = $atts;
-			$pt_cv_sub_id							 = $id;
-
-			// Get View settings
-			$settings = PT_CV_Functions::view_get_settings( $id );
-
-			// Show View output
-			$view_html = balanceTags( PT_CV_Functions::view_process_settings( $id, $settings ) );
-
-			return PT_CV_Functions::view_final_output( $view_html );
+				return $result;
+			}
 		}
 
 		/**
@@ -1253,18 +1167,12 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param string $html
 		 */
 		static function view_final_output( $html ) {
-			global $pt_cv_id, $pt_cv_sub_id;
+			ob_start();
+			PT_CV_Html::assets_of_view_types();
+			$view_assets = ob_get_clean();
 
-			//DEBUG_STYLE
-			$view_assets = '';
-			if ( $pt_cv_id == $pt_cv_sub_id ) {
-				// Print View assets
-				ob_start();
-				PT_CV_Html::assets_of_view_types();
-				$view_assets = ob_get_clean();
-			}
-
-			return $html . $view_assets;
+			$class = apply_filters( PT_CV_PREFIX_ . 'wrapper_class', PT_CV_PREFIX . 'wrapper' );
+			return sprintf( '<div class="%s">%s</div>', $class, $html ) . $view_assets;
 		}
 
 		/**
@@ -1278,7 +1186,7 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		public static function view_link( $view_id, $action = array() ) {
 			$edit_link = admin_url( 'admin.php?page=' . PT_CV_DOMAIN . '-add' );
 			if ( !empty( $view_id ) ) {
-				$query_args	 = array( 'id' => $view_id ) + $action;
+				$query_args	 = apply_filters( PT_CV_PREFIX_ . 'view_link_args', array( 'id' => $view_id ) + $action );
 				$edit_link	 = add_query_arg( $query_args, $edit_link );
 			}
 
@@ -1292,19 +1200,23 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 			// Validate request
 			check_ajax_referer( PT_CV_PREFIX_ . 'ajax_nonce', 'ajax_nonce' );
 
-			do_action( PT_CV_PREFIX_ . 'preview_header' );
+			if ( !empty( $_POST[ 'data' ] ) ) {
+				define( 'PT_CV_DOING_PREVIEW', true );
+				do_action( PT_CV_PREFIX_ . 'preview_header' );
 
-			// Request handle
-			$settings = array();
-			parse_str( $_POST[ 'data' ], $settings );
+				$settings = array();
+				parse_str( $_POST[ 'data' ], $settings );
 
-			// Get View id
-			$view_id = self::url_extract_param( 'id' );
+				$view_id = cv_sanitize_vid( PT_CV_Functions::url_extract_param( 'id' ) );
+				if ( empty( $view_id ) ) {
+					$view_id = PT_CV_Functions::string_random();
+				}
 
-			// Show View output
-			echo balanceTags( PT_CV_Functions::view_process_settings( $view_id, $settings ) );
+				// Show output
+				echo PT_CV_Functions::view_process_settings( $view_id, $settings );
 
-			do_action( PT_CV_PREFIX_ . 'preview_footer' );
+				do_action( PT_CV_PREFIX_ . 'preview_footer' );
+			}
 
 			// Must exit
 			die;
@@ -1314,69 +1226,29 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * Callback function for ajax Pagination action 'pagination_request'
 		 */
 		static function ajax_callback_pagination_request() {
-
 			// Validate request
-			check_ajax_referer( PT_CV_PREFIX_ . 'ajax_nonce', 'ajax_nonce' );
+			#check_ajax_referer( PT_CV_PREFIX_ . 'ajax_nonce', 'ajax_nonce' ); //disabled since 1.7.9 due to output -1 when use cache plugin, or nonce expired
 
-			// Session id
-			$session_id = empty( $_POST[ 'sid' ] ) ? '' : esc_sql( $_POST[ 'sid' ] );
+			if ( !isset( $_POST[ 'sid' ] ) )
+				return 'Empty View ID';
 
-			// Get saved $settings
-			$settings = isset( $_SESSION[ PT_CV_PREFIX . 'view-settings-' . $session_id ] ) ? $_SESSION[ PT_CV_PREFIX . 'view-settings-' . $session_id ] : array();
+			define( 'PT_CV_DOING_PAGINATION', true );
 
-			// If empty, get settings by ID
+			$view_id	 = cv_sanitize_vid( $_POST[ 'sid' ] );
+			$settings	 = cv_comp_pagination_settings( 'get', NULL );
 			if ( !$settings ) {
-				$settings = PT_CV_Functions::view_get_settings( $session_id );
+				$settings = PT_CV_Functions::view_get_settings( $view_id );
 			}
 
-			// Pagination settings
-			$pargs = array( 'session_id' => $session_id, 'page' => (int) esc_sql( $_POST[ 'page' ] ) );
-
 			// Switch language
-			$language = empty( $_POST[ 'lang' ] ) ? '' : esc_sql( $_POST[ 'lang' ] );
+			$language = empty( $_POST[ 'lang' ] ) ? '' : cv_esc_sql( $_POST[ 'lang' ] );
 			self::switch_language( $language );
 
-			// Show View output
-			echo balanceTags( PT_CV_Functions::view_process_settings( $session_id, $settings, $pargs ) );
+			// Show output
+			echo PT_CV_Functions::view_process_settings( $view_id, $settings, array( 'page' => absint( $_POST[ 'page' ] ) ) );
 
 			// Must exit
 			die;
-		}
-
-		/**
-		 * Show promotion text in View page
-		 */
-		static function util_show_promo_view() {
-			$pro_installed = get_option( 'pt_cv_version_pro' );
-			if ( !$pro_installed ) {
-				?>
-				<div class="pull-right" style="margin-top: -54px;">
-					<a class="btn btn-success" target="_blank" href="http://www.contentviewspro.com/pricing/?utm_source=client&utm_medium=view">&#187; Get Pro version</a>
-					or
-					<a class="btn btn-info" target="_blank" href="http://sample.contentviewspro.com/?utm_source=client&utm_medium=view">Check demo site</a>
-				</div>
-				<?php
-			}
-		}
-
-		/**
-		 * Generate pagination button for each page
-		 * @param string $class     Class name
-		 * @param string $this_page Page number
-		 * @param string $label     Page label
-		 */
-		static function pagination_generate_link( $class, $this_page, $label = '' ) {
-			$data_page = '';
-
-			if ( !$label ) {
-				$label		 = $this_page;
-				$data_page	 = sprintf( ' data-page="%s"', $this_page );
-			}
-
-			$html	 = sprintf( '<a%s href="%s">%s</a>', $data_page, esc_url( add_query_arg( 'vpage', $this_page ) ), $label );
-			$class	 = $class ? sprintf( ' class="%s"', esc_attr( $class ) ) : '';
-
-			return sprintf( '<li%s>%s</li>', $class, $html );
 		}
 
 		/**
@@ -1386,48 +1258,56 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param int $current_page  Current page number
 		 * @param int $pages_to_show Number of page to show
 		 */
-		static function pagination( $total_pages, $current_page = 1,
-							  $pages_to_show = 4 ) {
+		static function pagination( $total_pages, $current_page = 1, $pages_to_show = 4 ) {
 			if ( $total_pages == 1 )
 				return '';
 
-			$pages_to_show = apply_filters( PT_CV_PREFIX_ . 'pages_to_show', $pages_to_show );
-
-			// Define labels
-			$labels = apply_filters( PT_CV_PREFIX_ . 'pagination_label', array(
+			$pages_to_show	 = apply_filters( PT_CV_PREFIX_ . 'pages_to_show', $pages_to_show );
+			$labels			 = apply_filters( PT_CV_PREFIX_ . 'pagination_label', array(
 				'prev'	 => '&lsaquo;',
 				'next'	 => '&rsaquo;',
-				'first'	 => '&laquo;',
-				'last'	 => '&raquo;',
-			) );
+				) );
 
-			$start	 = ( ( $current_page - $pages_to_show ) > 0 ) ? $current_page - $pages_to_show : 1;
-			$end	 = ( ( $current_page + $pages_to_show ) < $total_pages ) ? $current_page + $pages_to_show : $total_pages;
+			$static_frontpage = (is_front_page() && !is_home());
+
+			global $wp_filter, $wp_rewrite;
+			$filters_bak = $wp_filter;
+			remove_all_filters( 'paginate_links' );
+			remove_all_filters( 'get_pagenum_link' );
+			add_filter( 'paginate_links', 'cv_comp_pagination_remove_old_param' );
+
+			$pb_bak						 = $wp_rewrite->pagination_base;
+			$wp_rewrite->pagination_base = $static_frontpage ? $pb_bak : PT_CV_PAGE_VAR;
+
+			$params = array(
+				'current'	 => $current_page,
+				'total'		 => $total_pages,
+				'type'		 => 'array',
+				'prev_text'	 => $labels[ 'prev' ],
+				'next_text'	 => $labels[ 'next' ],
+				'mid_size'	 => $pages_to_show ? intval( $pages_to_show ) / 2 : 2,
+			);
+			if ( !$wp_rewrite->using_permalinks() && !$static_frontpage ) {
+				$params[ 'format' ] = '?' . PT_CV_PAGE_VAR . '=%#%';
+			}
+
+			$links = paginate_links( $params );
+
+			$wp_filter					 = $filters_bak;
+			$wp_rewrite->pagination_base = $pb_bak;
 
 			$html = '';
+			foreach ( $links as $link ) {
+				$class	 = strpos( $link, 'current' ) !== false ? 'class="active"' : '';
+				$link	 = preg_replace( '/<span[^>]*>/', '<a href="#">', $link );
+				$link	 = str_replace( '</span>', '</a>', $link );
+				$link	 = str_replace( array( 'page-numbers', 'prev', 'next' ), '', $link );
 
-			$compared_page = 1;
-			// First
-			if ( $start > $compared_page ) {
-				$html .= self::pagination_generate_link( '', $compared_page, $labels[ 'first' ] );
-			}
-			// Prev
-			if ( $current_page > $compared_page ) {
-				$html .= self::pagination_generate_link( '', $current_page - 1, $labels[ 'prev' ] );
-			}
+				if ( get_query_var( 'paged' ) && !$static_frontpage && $wp_rewrite->using_permalinks() ) {
+					$link = preg_replace( "/\/page\/\d+/", '', $link );
+				}
 
-			for ( $i = $start; $i <= $end; $i++ ) {
-				$html .= self::pagination_generate_link( ( $current_page == $i ) ? 'active' : '', $i );
-			}
-
-			$compared_page = $total_pages;
-			// Next
-			if ( $current_page < $total_pages ) {
-				$html .= self::pagination_generate_link( '', $current_page + 1, $labels[ 'next' ] );
-			}
-			// Last
-			if ( $end < $compared_page ) {
-				$html .= self::pagination_generate_link( '', $compared_page, $labels[ 'last' ] );
+				$html .= "<li $class>" . $link . "</li>\n\t";
 			}
 
 			return $html;
@@ -1439,32 +1319,38 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		static function get_current_page( $pargs ) {
 			$paged = 1;
 
-			if ( !empty( $pargs[ 'page' ] ) ) {
-				$paged = intval( $pargs[ 'page' ] );
+			if ( PT_CV_Functions::setting_value( PT_CV_PREFIX . 'enable-pagination' ) ) {
+				if ( !empty( $pargs[ 'page' ] ) ) {
+					$paged = absint( $pargs[ 'page' ] );
+				}
+				$pagenum = cv_comp_get_page_number();
+				if ( !empty( $pagenum ) && PT_CV_Functions::setting_value( PT_CV_PREFIX . 'pagination-type' ) === 'normal' ) {
+					$paged = absint( $pagenum );
+				}
 			}
 
-			if ( !empty( $_GET[ 'vpage' ] ) ) {
-				$paged = intval( $_GET[ 'vpage' ] );
-			}
-
-			return $paged;
+			return apply_filters( PT_CV_PREFIX_ . 'set_current_page', $paged );
 		}
 
 		/**
-		 * If has pagination
+		 * Check if using pagination: Non-ajax or First page (of Ajax pagination)
 		 *
 		 * @param array $dargs
 		 * @param int $current_page
 		 * @return bool
 		 */
-		static function is_pagination( $dargs, $current_page ) {
-			// Get ajax type
-			$type = isset( $dargs[ 'pagination-settings' ][ 'type' ] ) ? $dargs[ 'pagination-settings' ][ 'type' ] : 'ajax';
+		static function nonajax_or_firstpage( $dargs, $current_page ) {
+			if ( !PT_CV_Functions::setting_value( PT_CV_PREFIX . 'enable-pagination' ) ) {
+				return false;
+			}
 
-			// Get page number of non-ajax pagination
-			$vpage = (int) self::url_extract_param( 'vpage', 1 );
-
-			return $type == 'normal' || ( $type == 'ajax' && ( $current_page === 1 || !empty( $_GET[ 'vpage' ] ) ) && !( $current_page === 1 && $vpage > 1 ) );
+			if ( $dargs[ 'pagination-settings' ][ 'type' ] === 'normal' ) {
+				return true;
+			} else if ( $current_page === 1 ) {
+				return true;
+			} else {
+				return false;
+			}
 		}
 
 		/**
@@ -1475,7 +1361,6 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 */
 		static function url_extract_param( $pname, $default = null ) {
 			$query	 = array();
-			// Get url to extract data
 			$url	 = $_SERVER[ 'REQUEST_URI' ];
 			if ( strpos( $url, 'admin-ajax.php' ) !== false ) {
 				$url = $_SERVER[ 'HTTP_REFERER' ];
@@ -1492,6 +1377,19 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		}
 
 		/**
+		 * Set global variable
+		 *
+		 * @global array $pt_cv_glb
+		 * @global string $pt_cv_id
+		 * @param type $variable
+		 * @param type $value
+		 */
+		static function set_global_variable( $variable, $value ) {
+			global $pt_cv_glb, $pt_cv_id;
+			$pt_cv_glb[ $pt_cv_id ][ $variable ] = $value;
+		}
+
+		/**
 		 * Get global variable
 		 *
 		 * @global array $pt_cv_glb
@@ -1499,22 +1397,77 @@ if ( !class_exists( 'PT_CV_Functions' ) ) {
 		 * @param string $variable
 		 * @return mixed
 		 */
-		static function get_global_variable( $variable ) {
+		static function get_global_variable( $variable, $unset = false ) {
 			global $pt_cv_glb, $pt_cv_id;
 			if ( !$pt_cv_glb || !$pt_cv_id )
 				return null;
 
 			$value = isset( $pt_cv_glb[ $pt_cv_id ][ $variable ] ) ? $pt_cv_glb[ $pt_cv_id ][ $variable ] : null;
 
+			// Unset after get
+			if ( $unset && $value ) {
+				unset( $pt_cv_glb[ $pt_cv_id ][ $variable ] );
+			}
+
 			return $value;
 		}
 
 		/**
 		 * Output debug message (if debug is enable) / nice message (otherwise)
-		 * @param type $message
+		 * @param string $log		Raw log for debugging
+		 * @param string $message	Nice message for user
 		 */
 		static function debug_output( $log, $message = '' ) {
 			return defined( 'PT_CV_DEBUG' ) ? ( PT_CV_DEBUG ? $log : $message ) : $message;
+		}
+
+		// Reset WP query
+		static function reset_query() {
+			if ( apply_filters( PT_CV_PREFIX_ . 'reset_query', true ) ) {
+				wp_reset_postdata();
+			}
+		}
+
+		/**
+		 * Check duplicated View
+		 * @return bool
+		 */
+		static function duplicated_process( $view_id, $sc_params ) {
+			$duplicated = false;
+
+			if ( apply_filters( PT_CV_PREFIX_ . 'check_duplicate', 0, $view_id, $sc_params ) ) {
+				global $pt_cv_views;
+
+				$vid = $view_id . '-' . md5( serialize( $sc_params ) );
+				if ( !empty( $pt_cv_views[ $vid ] ) ) {
+					$duplicated = true;
+				} else {
+					$pt_cv_views[ $vid ] = 1;
+				}
+			}
+
+			return $duplicated;
+		}
+
+		/**
+		 * Disable View shortcode in posts of current View
+		 * @since 1.7.6
+		 *
+		 * @global array $shortcode_tags
+		 * @global array $shortcode_tags_backup
+		 * @param string $action
+		 */
+		static function disable_view_shortcode( $action = 'disable' ) {
+			if ( apply_filters( PT_CV_PREFIX_ . 'disable_child_shortcode', true ) ) {
+				global $shortcode_tags, $shortcode_tags_backup;
+
+				if ( $action == 'disable' ) {
+					$shortcode_tags_backup		 = $shortcode_tags;
+					$shortcode_tags[ 'pt_view' ] = '__return_false';
+				} else {
+					$shortcode_tags = $shortcode_tags_backup;
+				}
+			}
 		}
 
 	}

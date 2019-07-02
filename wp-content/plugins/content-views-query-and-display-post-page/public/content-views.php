@@ -1,14 +1,17 @@
 <?php
-
 /**
  * Content Views for Public
  *
  * @package   PT_Content_Views
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 class PT_Content_Views {
 
 	/**
@@ -38,9 +41,8 @@ class PT_Content_Views {
 	 * @since     1.0.0
 	 */
 	private function __construct() {
-
 		// Load plugin text domain
-		add_action( 'init', array( $this, 'load_plugin_textdomain' ), 11 );
+		add_action( 'plugins_loaded', array( $this, 'load_plugin_textdomain' ), 11 );
 
 		// Register content
 		add_action( 'init', array( $this, 'content_register' ) );
@@ -58,6 +60,9 @@ class PT_Content_Views {
 		// Output assets content at footer of page
 		add_action( 'wp_footer', array( 'PT_CV_Html', 'assets_of_view_types' ), 100 );
 
+		// Load assets if they are not enqueued to 'wp_enqueue_scripts'
+		add_action( 'wp_footer', array( $this, 'enqueue_assets' ), 2 );
+
 		// Ajax action
 		$action = 'pagination_request';
 		add_action( 'wp_ajax_' . $action, array( 'PT_CV_Functions', 'ajax_callback_' . $action ) );
@@ -65,17 +70,6 @@ class PT_Content_Views {
 
 		// Custom hooks for both preview & frontend
 		PT_CV_Hooks::init();
-	}
-
-	/**
-	 * Return the plugin slug.
-	 *
-	 * @since    1.0.0
-	 *
-	 * @return    Plugin slug variable.
-	 */
-	public function get_plugin_slug() {
-		return $this->plugin_slug;
 	}
 
 	/**
@@ -106,21 +100,14 @@ class PT_Content_Views {
 	 *                                       activated on an individual blog.
 	 */
 	public static function activate( $network_wide ) {
-
 		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
-
 			if ( $network_wide ) {
-
-				// Get all blog ids
 				$blog_ids = self::get_blog_ids();
-
 				foreach ( $blog_ids as $blog_id ) {
-
 					switch_to_blog( $blog_id );
 					self::single_activate();
+					restore_current_blog();
 				}
-
-				restore_current_blog();
 			} else {
 				self::single_activate();
 			}
@@ -140,21 +127,14 @@ class PT_Content_Views {
 	 *                                       deactivated on an individual blog.
 	 */
 	public static function deactivate( $network_wide ) {
-
 		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
-
 			if ( $network_wide ) {
-
-				// Get all blog ids
 				$blog_ids = self::get_blog_ids();
-
 				foreach ( $blog_ids as $blog_id ) {
-
 					switch_to_blog( $blog_id );
 					self::single_deactivate();
+					restore_current_blog();
 				}
-
-				restore_current_blog();
 			} else {
 				self::single_deactivate();
 			}
@@ -227,14 +207,23 @@ class PT_Content_Views {
 	 * @since    1.0.0
 	 */
 	public function load_plugin_textdomain() {
-		$domain	 = PT_CV_DOMAIN;
-		// WPLANG is no longer needed since 4.0
-		$locale	 = get_locale();
+		/* In v1.6.8.3, textdomain changed from "content-views" to "content-views-query-and-display-post-page"
+		 */
 
-		// Load mo file from wp-content/languages/content-views/
-		load_textdomain( $domain, WP_LANG_DIR . "/{$domain}/{$domain}-{$locale}.mo" );
-		// Load mo file from sub-folder /languages of this plugin
-		load_plugin_textdomain( $domain, FALSE, dirname( plugin_basename( PT_CV_FILE ) ) . '/languages/' );
+		// WPLANG is no longer needed since 4.0
+		$locale = get_locale();
+
+		$old_lang_file	 = WP_LANG_DIR . "/content-views/content-views-{$locale}.mo";
+		$lang_pack		 = WP_LANG_DIR . "/plugins/content-views-query-and-display-post-page-{$locale}.mo";
+		$plugin_lang_dir = dirname( plugin_basename( PT_CV_FILE ) ) . '/languages/';
+
+		if ( file_exists( $old_lang_file ) ) {
+			load_textdomain( 'content-views-query-and-display-post-page', $old_lang_file );
+		} elseif ( file_exists( $lang_pack ) ) {
+			load_textdomain( 'content-views-query-and-display-post-page', $lang_pack );
+		} else {
+			load_plugin_textdomain( 'content-views-query-and-display-post-page', FALSE, $plugin_lang_dir );
+		}
 	}
 
 	/**
@@ -246,20 +235,20 @@ class PT_Content_Views {
 		 * Register custom post type : View
 		 */
 		$labels = array(
-			'name'				 => _x( 'Views', 'post type general name', PT_CV_DOMAIN ),
-			'singular_name'		 => _x( 'View', 'post type singular name', PT_CV_DOMAIN ),
-			'menu_name'			 => _x( 'Views', 'admin menu', PT_CV_DOMAIN ),
-			'name_admin_bar'	 => _x( 'View', 'add new on admin bar', PT_CV_DOMAIN ),
-			'add_new'			 => _x( 'Add New', PT_CV_POST_TYPE, PT_CV_DOMAIN ),
-			'add_new_item'		 => __( 'Add New View', PT_CV_DOMAIN ),
-			'new_item'			 => __( 'New View', PT_CV_DOMAIN ),
-			'edit_item'			 => __( 'Edit View', PT_CV_DOMAIN ),
-			'view_item'			 => __( 'View View', PT_CV_DOMAIN ),
-			'all_items'			 => __( 'All Views', PT_CV_DOMAIN ),
-			'search_items'		 => __( 'Search Views', PT_CV_DOMAIN ),
-			'parent_item_colon'	 => __( 'Parent Views:', PT_CV_DOMAIN ),
-			'not_found'			 => __( 'No views found.', PT_CV_DOMAIN ),
-			'not_found_in_trash' => __( 'No views found in Trash.', PT_CV_DOMAIN ),
+			'name'				 => _x( 'Views', 'post type general name', 'content-views-query-and-display-post-page' ),
+			'singular_name'		 => _x( 'View', 'post type singular name', 'content-views-query-and-display-post-page' ),
+			'menu_name'			 => _x( 'Views', 'admin menu', 'content-views-query-and-display-post-page' ),
+			'name_admin_bar'	 => _x( 'Content View', 'add new on admin bar', 'content-views-query-and-display-post-page' ),
+			'add_new'			 => _x( 'Add New', 'post' ),
+			'add_new_item'		 => __( 'Add New View', 'content-views-query-and-display-post-page' ),
+			'new_item'			 => __( 'New View', 'content-views-query-and-display-post-page' ),
+			'edit_item'			 => __( 'Edit View', 'content-views-query-and-display-post-page' ),
+			'view_item'			 => __( 'See View', 'content-views-query-and-display-post-page' ),
+			'all_items'			 => __( 'All Views', 'content-views-query-and-display-post-page' ),
+			'search_items'		 => __( 'Search Views', 'content-views-query-and-display-post-page' ),
+			'parent_item_colon'	 => __( 'Parent Views:', 'content-views-query-and-display-post-page' ),
+			'not_found'			 => __( 'No views found.', 'content-views-query-and-display-post-page' ),
+			'not_found_in_trash' => __( 'No views found in Trash.', 'content-views-query-and-display-post-page' ),
 		);
 
 		$args = array(
@@ -268,6 +257,7 @@ class PT_Content_Views {
 			// Hide in menu, but can see All Views page
 			'show_ui'			 => true, // set "true" to fix "Invalid post type" error
 			'show_in_menu'		 => false,
+			'show_in_admin_bar'	 => true,
 			'query_var'			 => true,
 			'rewrite'			 => array( 'slug' => PT_CV_POST_TYPE ),
 			'capability_type'	 => 'post',
@@ -291,7 +281,9 @@ class PT_Content_Views {
 	 * @since    1.0.0
 	 */
 	public function enqueue_styles() {
-		PT_CV_Html::frontend_styles();
+		if ( apply_filters( PT_CV_PREFIX_ . 'default_enqueue_assets', 1 ) ) {
+			PT_CV_Html::frontend_styles();
+		}
 	}
 
 	/**
@@ -300,35 +292,32 @@ class PT_Content_Views {
 	 * @since    1.0.0
 	 */
 	public function enqueue_scripts() {
-		PT_CV_Html::frontend_scripts();
+		if ( apply_filters( PT_CV_PREFIX_ . 'default_enqueue_assets', 1 ) ) {
+			PT_CV_Html::frontend_scripts();
+		}
 	}
 
-	/**
-	 * Update view count
-	 *
-	 * @global type $post
-	 * @return void
-	 */
-	public static function _update_view_count() {
-		global $post;
-		if ( !isset( $post ) || !is_object( $post ) ) {
-			return;
+	public function enqueue_assets() {
+		// Execute if assets were not enqueued in default way
+		if ( !apply_filters( PT_CV_PREFIX_ . 'default_enqueue_assets', 1 ) ) {
+			global $pt_cv_id;
+			if ( !empty( $pt_cv_id ) || apply_filters( PT_CV_PREFIX_ . 'view_executed', 0 ) ) {
+				PT_CV_Html::frontend_styles();
+				PT_CV_Html::frontend_scripts();
+			}
 		}
-		if ( is_single( $post->ID ) ) {
-			PT_CV_Functions::post_update_view_count( $post->ID );
-		}
+
+		do_action( PT_CV_PREFIX_ . 'enqueue_assets' );
 	}
 
 	/**
 	 * Custom actions at head
 	 */
 	public function head_actions() {
-		// Update View count
-		self::_update_view_count();
-
 		// Initialize global variables
-		global $pt_cv_glb, $pt_cv_id;
+		global $pt_cv_glb, $pt_cv_views, $pt_cv_id;
 		$pt_cv_glb	 = array();
+		$pt_cv_views = array();
 		$pt_cv_id	 = 0;
 	}
 

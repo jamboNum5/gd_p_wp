@@ -1,59 +1,88 @@
+<?php
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+?>
 <style>
-	#pt-cv-features {padding-right: 0; margin-bottom: 30px;}
-	#pt-cv-features * {font-size: 14px;}
-	#pt-cv-features h3 {font-size: 18px;}
-	#pt-cv-features .col-md-6 {padding: 0;}
+	#pt-cv-features {
+		padding: 0;
+		overflow: hidden;
+	}
+
+	#pt-cv-features * {
+		font-size: 14px;
+	}
+
+	.cvgopro {
+		color: #fe1243;
+		font-size: 23px;
+		margin-bottom: 20px;
+	}
+
+	hr {margin: 0 0 !important;}
+
+	h3 {
+		font-size: 18px!important;
+		margin: 0 0 8px!important;
+		color: #111!important;
+		font-weight: 600!important;
+	}
+
+	#pt-cv-features > div {
+		margin-bottom: 15px;
+	}
+
+	#pt-cv-features ul {
+		list-style: circle;
+		margin-left: 20px;
+		margin-bottom: 0;
+	}
+
+	#pt-cv-features a{
+		color: #fe1243;
+	}
+
+	.cvform {display: none}
 </style>
 
-<h3>&DoubleRightArrow; <a style="font-size: 18px;" href="http://www.contentviewspro.com/docs/?utm_source=settings_page" target="_blank">Content Views Documentation</a></h3>
+<?php
+$cp = '?utm_source=client&utm_medium=settings_page&utm_campaign=gopro';
+?>
+
+<p><a href="//docs.contentviewspro.com/<?php echo $cp; ?>" target="_blank">Documentation</a> | <a href="//www.contentviewspro.com/contact/<?php echo $cp; ?>" target="_blank">Contact Us</a></p>
 
 <hr>
 
-<h2>Want more powerful features?</h2>
+<h2 class="cvgopro">More benefits and values for your site:</h2>
 
-<div class="col-md-12" id="pt-cv-features">
-	<div class="col-md-6">
-		<h3>
-			More beautiful & awesome layouts
-		</h3>
+<div class="row" id="pt-cv-features">
+	<div class="col-md-12">
+		<h3>Filter Custom Post Type, Custom Field, Custom Taxonomy</h3>
 		<div>
-			<ul style="list-style: circle; margin-left: 20px;">
-				<li>Grid </li>
-				<li>Pinterest </li>
-				<li>Timeline </li>
-				<li>Scrollable/Slider list </li>
-				<li>Collapsible list</li>
+			<ul>
+				<li>support custom post type: WooCommerce, Easy Digital Downloads, Events... (<a href="//sample.contentviewspro.com/supports/woocommerce-3/<?php echo $cp; ?>" target="_blank">view sample</a>)</li>
+				<li>support custom field: Advanced Custom Fields, Pods, Types... (<a href="//sample.contentviewspro.com/supports/advanced-custom-fields/<?php echo $cp; ?>" target="_blank">view sample</a>)</li>
 			</ul>
 		</div>
 	</div>
-
-	<div class="col-md-6">
-		<h3>
-			Query custom post types
-		</h3>
+	<div class="col-md-12">
+		<h3>More Amazing Layouts To Attract Your Visitors</h3>
 		<div>
-			<p>Content Views Pro allows you to query any custom post types.</p>
-			<p>And of course, It supports below well-known plugins:</p>
-			<ul style="list-style: circle; margin-left: 20px;">
-				<li>WooCommerce</li>
-				<li>Easy Digital Downloads</li>
-				<li>Advanced Custom Fields</li>
-			</ul>
+			Pinterest, Masonry, Timeline, One & others, Glossary, Overlay... (<a href="//sample.contentviewspro.com/view-type/pinterest/<?php echo $cp; ?>" target="_blank">view sample</a>)
 		</div>
 	</div>
-
-	<h3>&raquo; <a style="font-size: 18px;" href="http://sample.contentviewspro.com/?utm_source=settings_page" target="_blank">See all features</a></h3>
-	<br>
+	<div class="col-md-12">
+		<h3>Grid Layout For Blog, Category, Search... Page</h3>
+		<div>Use the beautiful grid for Blog, Category, Tag, Search results... page easily without coding (<a href="//docs.contentviewspro.com/completely-replace-wordpress-layout-by-content-views-pro-layout/<?php echo $cp; ?>" target="_blank">read more</a>)</div>
+	</div>
+	<div class="col-md-12">
+		<h3>Design Without Writing CSS</h3>
+		<div>Easy to customize the style of text, button with unlimited color, hundreds of font families, font-size... (<a href="//docs.contentviewspro.com/style-settings/<?php echo $cp; ?>" target="_blank">read more</a>)</div>
+	</div>
+	<div class="col-md-12">
+		<h3>Make Money Online $</h3>
+		<div>Display Google Adsense, affiliate banners... between the posts grid easily (<a href="//www.contentviewspro.com/<?php echo $cp; ?>#show-ads" target="_blank">read more</a>)</div>
+	</div>
 </div>
 
-<p style="margin-top: 20px;">
-	<a href="http://www.contentviewspro.com/pricing/?utm_source=settings_page" target="_blank" class="btn btn-success">Upgrade now</a>
-	or
-	<a href="http://sample.contentviewspro.com/?utm_source=settings_page" target="_blank" class="btn btn-info">Check demo site</a>
-</p>
-
-<hr>
-
-<p>I hope you enjoy with Content Views!</p>
-<p>Plugin developed by PT Guy (support@contentviewspro.com)</p>
-<p>Copyright &COPY; 2014</p>
+<p><a href="//www.contentviewspro.com/<?php echo $cp; ?>" target="_blank" class="btn btn-primary">Get Pro Now</a></p>

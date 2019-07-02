@@ -1,14 +1,17 @@
 <?php
-
 /**
  * Define values for input, select...
  *
  * @package   PT_Content_Views
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 if ( !class_exists( 'PT_CV_Values' ) ) {
 
 	/**
@@ -36,8 +39,10 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 				if ( in_array( $post_type->name, $excludes ) ) {
 					continue;
 				}
-				$result[ $post_type->name ] = __( $post_type->labels->singular_name, PT_CV_DOMAIN );
+				$result[ $post_type->name ] = $post_type->labels->singular_name;
 			}
+
+			$result = apply_filters( PT_CV_PREFIX_ . 'post_types_list', $result );
 
 			return $result;
 		}
@@ -60,7 +65,7 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 				$result[ $post_type ]	 = $taxonomy_names;
 			}
 
-			return $result;
+			return apply_filters( PT_CV_PREFIX_ . 'post_types_taxonomies', $result );
 		}
 
 		/**
@@ -77,10 +82,10 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 			$taxonomies	 = get_taxonomies( $args, 'objects' );
 
 			foreach ( $taxonomies as $taxonomy ) {
-				$result[ $taxonomy->name ] = __( $taxonomy->labels->singular_name, PT_CV_DOMAIN );
+				$result[ $taxonomy->name ] = $taxonomy->labels->singular_name;
 			}
 
-			return $result;
+			return apply_filters( PT_CV_PREFIX_ . 'tax_list', $result );
 		}
 
 		/**
@@ -90,8 +95,8 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 */
 		static function taxonomy_relation() {
 			return array(
-				'AND'	 => __( 'AND', PT_CV_DOMAIN ),
-				'OR'	 => __( 'OR', PT_CV_DOMAIN ),
+				'AND'	 => __( 'AND', 'content-views-query-and-display-post-page' ),
+				'OR'	 => __( 'OR', 'content-views-query-and-display-post-page' ),
 			);
 		}
 
@@ -101,29 +106,10 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 */
 		static function taxonomy_operators() {
 			return array(
-				'IN'	 => __( 'IN', PT_CV_DOMAIN ) . ' &#8212; ' . __( 'A post is displayed only if it associated with at least one value in terms list', PT_CV_DOMAIN ),
-				'NOT IN' => __( 'NOT IN', PT_CV_DOMAIN ) . ' &#8212; ' . __( 'A post is displayed only if it did NOT associated with any values in terms list', PT_CV_DOMAIN ),
-				'AND'	 => __( 'AND', PT_CV_DOMAIN ) . ' &#8212; ' . __( 'A post is displayed only if it associated with all values in terms list', PT_CV_DOMAIN ),
+				'IN'	 => __( 'IN - show posts which match ANY selected terms', 'content-views-query-and-display-post-page' ),
+				'NOT IN' => __( 'NOT IN - show posts which DO NOT match ANY selected terms', 'content-views-query-and-display-post-page' ),
+				'AND'	 => __( 'AND - show posts which match ALL selected terms', 'content-views-query-and-display-post-page' ),
 			);
-		}
-
-		/**
-		 * Get taxonomies of Post type
-		 *
-		 * @param string $object Name of the post type, or a post object
-		 * @param string $output The type of output to return, either taxonomy 'names' or 'objects'
-		 *
-		 * @return array
-		 */
-		static function taxonomy_by_post_type( $object, $output = 'names' ) {
-			$data	 = get_object_taxonomies( $object, $output );
-			$result	 = array();
-
-			foreach ( (array) $data as $taxonomy ) {
-				$result[ $taxonomy ] = self::taxonomy_info( $taxonomy, 'singular_name' );
-			}
-
-			return $result;
 		}
 
 		/**
@@ -141,7 +127,7 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 				$result = $data->$info;
 			} else {
 				if ( isset( $data->labels->$info ) ) {
-					$result = __( $data->labels->$info, PT_CV_DOMAIN );
+					$result = $data->labels->$info;
 				}
 			}
 
@@ -155,20 +141,19 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 * @param string $terms_of_taxonomies Array of terms of taxonomies
 		 * @param array  $args                Array of query parameters
 		 */
-		static function term_of_taxonomy( $taxonomy, &$terms_of_taxonomies,
-									$args = array() ) {
+		static function term_of_taxonomy( $taxonomy, &$terms_of_taxonomies, $args = array(), $data = 'name' ) {
 			$args	 = array_merge( array( 'hide_empty' => false ), $args );
 			$terms	 = get_terms( array( $taxonomy ), $args );
 
 			$term_slug_name = array();
 			foreach ( $terms as $term ) {
-				$term_slug_name[ $term->slug ] = $term->name;
+				$term_slug_name[ $term->slug ] = ($data === 'name') ? $term->name : $term;
 			}
 
 			// Sort values of param by saved order
 			$term_slug_name = apply_filters( PT_CV_PREFIX_ . 'settings_sort_single', $term_slug_name, $taxonomy . '-' . 'terms' );
 
-			$terms_of_taxonomies[ $taxonomy ] = $term_slug_name;
+			$terms_of_taxonomies[ $taxonomy ] = array_filter( $term_slug_name ); /* prevent term with empty name */
 		}
 
 		/**
@@ -178,8 +163,8 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 */
 		static function yes_no( $key = '', $value = '' ) {
 			$result = array(
-				'yes'	 => __( 'Yes', PT_CV_DOMAIN ),
-				'no'	 => __( 'No', PT_CV_DOMAIN ),
+				'yes'	 => __( 'Yes', 'content-views-query-and-display-post-page' ),
+				'no'	 => __( 'No', 'content-views-query-and-display-post-page' ),
 			);
 			if ( !empty( $key ) ) {
 				return array( $key => empty( $value ) ? $result[ $key ] : $value );
@@ -189,26 +174,14 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		}
 
 		/**
-		 * Show Hide options
-		 *
-		 * @return array
-		 */
-		static function show_hide() {
-			return array(
-				'show'	 => __( 'Show', PT_CV_DOMAIN ),
-				'hide'	 => __( 'Hide', PT_CV_DOMAIN ),
-			);
-		}
-
-		/**
 		 * Paging types
 		 *
 		 * @return array
 		 */
 		static function pagination_types() {
 			$result = array(
-				'ajax'	 => __( 'Ajax', PT_CV_DOMAIN ),
-				'normal' => __( 'Normal', PT_CV_DOMAIN ),
+				'ajax'	 => __( 'Ajax', 'content-views-query-and-display-post-page' ),
+				'normal' => __( 'Normal', 'content-views-query-and-display-post-page' ),
 			);
 
 			$result = apply_filters( PT_CV_PREFIX_ . 'pagination_types', $result );
@@ -223,7 +196,7 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 */
 		static function pagination_styles() {
 			$result = array(
-				'regular' => __( 'Regular pagination', PT_CV_DOMAIN ),
+				'regular' => __( 'Numbered pagination', 'content-views-query-and-display-post-page' ),
 			);
 
 			$result = apply_filters( PT_CV_PREFIX_ . 'pagination_styles', $result );
@@ -238,8 +211,8 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 */
 		static function orders() {
 			return array(
-				'asc'	 => __( 'ASC', PT_CV_DOMAIN ),
-				'desc'	 => __( 'DESC', PT_CV_DOMAIN ),
+				'asc'	 => __( 'Ascending' ),
+				'desc'	 => __( 'Descending' ),
 			);
 		}
 
@@ -247,16 +220,13 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 * List post status
 		 */
 		static function post_statuses() {
-			return array(
-				'publish'	 => __( 'Publish', PT_CV_DOMAIN ),
-				'pending'	 => __( 'Pending', PT_CV_DOMAIN ),
-				'draft'		 => __( 'Draft', PT_CV_DOMAIN ),
-				'auto-draft' => __( 'Auto draft', PT_CV_DOMAIN ),
-				'future'	 => __( 'Future', PT_CV_DOMAIN ),
-				'private'	 => __( 'Private', PT_CV_DOMAIN ),
-				'inherit'	 => __( 'Inherit', PT_CV_DOMAIN ),
-				'trash'		 => __( 'Trash', PT_CV_DOMAIN ),
-			);
+			$result		 = array();
+			$statuses	 = get_post_stati( null, 'objects' );
+			foreach ( $statuses as $status => $object ) {
+				$result[ $status ] = ucfirst( $object->label );
+			}
+
+			return $result;
 		}
 
 		/**
@@ -266,26 +236,14 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 */
 		static function advanced_settings() {
 			return apply_filters(
-			PT_CV_PREFIX_ . 'advanced_settings', array(
-				'taxonomy'	 => __( 'Taxonomy (Categories, Tags...)', PT_CV_DOMAIN ),
-				'status'	 => __( 'Status', PT_CV_DOMAIN ),
-				'order'		 => __( 'Order & Orderby', PT_CV_DOMAIN ),
-				'search'	 => __( 'Search', PT_CV_DOMAIN ),
-				'author'	 => __( 'Author', PT_CV_DOMAIN ),
-			)
+				PT_CV_PREFIX_ . 'advanced_settings', array(
+				'taxonomy'	 => __( 'Taxonomy', 'content-views-query-and-display-post-page' ) . sprintf( ' (%s, %s...)', __( 'Categories' ), __( 'Tags' ) ),
+				'status'	 => __( 'Status' ),
+				'order'		 => __( 'Sort by', 'content-views-query-and-display-post-page' ),
+				'search'	 => __( 'Keyword' ),
+				'author'	 => __( 'Author' ),
+				)
 			);
-		}
-
-		/**
-		 * Show WP author dropdown list by WP wp_dropdown_users functions
-		 *
-		 * @return array
-		 */
-		static function post_author( $name = 'author', $data = array() ) {
-			$field_name	 = PT_CV_PREFIX . $name;
-			$selected	 = isset( $data[ $field_name ] ) ? $data[ $field_name ] : '';
-
-			return wp_dropdown_users( array( 'name' => $field_name, 'selected' => $selected, 'class' => 'form-control', 'show_option_none' => __( '&mdash; Select &mdash;', PT_CV_DOMAIN ), 'echo' => false ) );
 		}
 
 		/**
@@ -294,22 +252,29 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 * @return array
 		 */
 		static function user_list() {
+			global $cv_admin_users_list;
 
-			$result	 = array();
-			$show	 = 'display_name';
+			if ( !empty( $cv_admin_users_list ) ) {
+				$result = $cv_admin_users_list;
+			} else {
+				$result	 = array();
+				$show	 = 'display_name';
 
-			$args = array(
-				'fields'	 => array( 'ID', $show ),
-				'orderby'	 => 'display_name',
-				'order'		 => 'ASC',
-			);
+				$args = array(
+					'fields'	 => array( 'ID', $show, 'user_login' ),
+					'orderby'	 => 'display_name',
+					'order'		 => 'ASC',
+				);
 
-			$users = get_users( $args );
-			foreach ( (array) $users as $user ) {
-				$user->ID	 = (int) $user->ID;
-				$display	 = !empty( $user->$show ) ? $user->$show : '(' . $user->user_login . ')';
+				$users = get_users( apply_filters( PT_CV_PREFIX_ . 'user_list', $args ) );
+				foreach ( (array) $users as $user ) {
+					$user->ID	 = (int) $user->ID;
+					$display	 = !empty( $user->$show ) ? $user->$show : '(' . $user->user_login . ')';
 
-				$result[ $user->ID ] = esc_html( $display );
+					$result[ $user->ID ] = esc_html( $display );
+				}
+
+				$cv_admin_users_list = $result;
 			}
 
 			return $result;
@@ -320,11 +285,11 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		 */
 		static function post_regular_orderby() {
 			$regular_orderby = array(
-				''			 => __( '&mdash; Select &mdash;', PT_CV_DOMAIN ),
-				'ID'		 => __( 'ID', PT_CV_DOMAIN ),
-				'title'		 => __( 'Title', PT_CV_DOMAIN ),
-				'date'		 => __( 'Created date', PT_CV_DOMAIN ),
-				'modified'	 => __( 'Modified date', PT_CV_DOMAIN ),
+				''			 => sprintf( '- %s -', __( 'Select' ) ),
+				'ID'		 => __( 'ID', 'content-views-query-and-display-post-page' ),
+				'title'		 => __( 'Title' ),
+				'date'		 => __( 'Published date', 'content-views-query-and-display-post-page' ),
+				'modified'	 => __( 'Modified date', 'content-views-query-and-display-post-page' ),
 			);
 
 			$result = apply_filters( PT_CV_PREFIX_ . 'regular_orderby', $regular_orderby );
@@ -340,9 +305,9 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		static function view_type() {
 
 			$view_type = array(
-				'grid'			 => __( 'Grid', PT_CV_DOMAIN ),
-				'collapsible'	 => __( 'Collapsible List', PT_CV_DOMAIN ),
-				'scrollable'	 => __( 'Scrollable List', PT_CV_DOMAIN ),
+				'grid'			 => __( 'Grid', 'content-views-query-and-display-post-page' ),
+				'collapsible'	 => __( 'Collapsible List', 'content-views-query-and-display-post-page' ),
+				'scrollable'	 => __( 'Scrollable List', 'content-views-query-and-display-post-page' ),
 			);
 
 			$result = apply_filters( PT_CV_PREFIX_ . 'view_type', $view_type );
@@ -381,8 +346,8 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		static function layout_format() {
 
 			$result = array(
-				'1-col'	 => __( '1 column &#8212; All fields inside an output item are shown in one column', PT_CV_DOMAIN ),
-				'2-col'	 => __( '2 columns &#8212; Show thumbnail on the left/right side of other fields', PT_CV_DOMAIN ),
+				'1-col'	 => __( 'Show thumbnail & text vertically', 'content-views-query-and-display-post-page' ),
+				'2-col'	 => __( 'Show thumbnail on the left/right of text', 'content-views-query-and-display-post-page' ),
 			);
 
 			$result = apply_filters( PT_CV_PREFIX_ . 'layout_format', $result );
@@ -396,8 +361,8 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		static function open_in() {
 
 			$open_in = array(
-				'_self'	 => __( 'Current tab', PT_CV_DOMAIN ),
-				'_blank' => __( 'New tab', PT_CV_DOMAIN ),
+				'_self'	 => __( 'Current tab', 'content-views-query-and-display-post-page' ),
+				'_blank' => __( 'New tab', 'content-views-query-and-display-post-page' ),
 			);
 
 			$result = apply_filters( PT_CV_PREFIX_ . 'open_in', $open_in );
@@ -445,7 +410,7 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 				}
 			}
 			// Add full sizes
-			$result[ 'full' ] = __( 'Original resolution (But resize automatically to fit its container)', PT_CV_DOMAIN );
+			$result[ 'full' ] = __( 'Full Size' );
 
 			// Sort custom sizes by index (width * height)
 			krsort( $dimensions_to_sort );
@@ -461,25 +426,6 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		}
 
 		/**
-		 * Tab Position
-		 *
-		 * @return array
-		 */
-		static function tab_position() {
-
-			$tab_position = array(
-				'top'	 => __( 'Top', PT_CV_DOMAIN ),
-				'left'	 => __( 'Left', PT_CV_DOMAIN ),
-				'bottom' => __( 'Bottom', PT_CV_DOMAIN ),
-				'right'	 => __( 'Right', PT_CV_DOMAIN ),
-			);
-
-			$result = apply_filters( PT_CV_PREFIX_ . 'tab_position', $tab_position );
-
-			return $result;
-		}
-
-		/**
 		 * Thumbnail Position
 		 *
 		 * @return array
@@ -487,8 +433,8 @@ if ( !class_exists( 'PT_CV_Values' ) ) {
 		static function thumbnail_position() {
 
 			$thumbnail_position = array(
-				'left'	 => __( 'Left', PT_CV_DOMAIN ),
-				'right'	 => __( 'Right', PT_CV_DOMAIN ),
+				'left'	 => __( 'Left' ),
+				'right'	 => __( 'Right' ),
 			);
 
 			$result = apply_filters( PT_CV_PREFIX_ . 'thumbnail_position', $thumbnail_position );

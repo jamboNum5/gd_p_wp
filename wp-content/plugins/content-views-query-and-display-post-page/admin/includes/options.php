@@ -5,11 +5,15 @@
  * Contain all functions to display setting options on page
  *
  * @package   PT_Options_Framework
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 if ( !class_exists( 'PT_Options_Framework' ) ) {
 
 	class PT_Options_Framework {
@@ -57,8 +61,10 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 		 * @param string $random_id   Random string
 		 * @param array  $dependence_ Global dependence array
 		 */
-		public static function _dependence_assign( $dependence, $random_id,
-											 &$dependence_ ) {
+		public static function _dependence_assign( $dependence, $random_id, &$dependence_ ) {
+			if ( !isset( $dependence[ 1 ] ) ) {
+				return;
+			}
 			$dependence_[ $dependence[ 0 ] ][] = array( $random_id, $dependence[ 1 ], isset( $dependence[ 2 ] ) ? $dependence[ 2 ] : '=' );
 		}
 
@@ -104,10 +110,11 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 			$label			 = self::label( $group[ 'label' ], $extra_setting );
 			$params			 = self::params( $group[ 'params' ], $data, $extra_setting );
 			$random_id		 = self::_dependence_check( $group, $dependence_ );
-			$id				 = $class			 = '';
+			$id				 = '';
+			$class			 = isset( $extra_setting[ 'params' ][ 'group-class' ] ) ? $extra_setting[ 'params' ][ 'group-class' ] : '';
 			if ( $random_id ) {
-				$id		 = "id='$random_id'";
-				$class	 = 'hidden';
+				$id = "id='$random_id'";
+				$class .= ' hidden';
 			}
 
 			return "<div class='form-group pt-form-group $class' $id>$label $params</div>";
@@ -122,7 +129,7 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 			$for	 = isset( $label[ 'for' ] ) ? "for='{$label[ 'for' ]}'" : '';
 			$width	 = 12 - ( isset( $extra_setting[ 'params' ][ 'width' ] ) ? intval( $extra_setting[ 'params' ][ 'width' ] ) : 10 );
 			if ( $width ) {
-				$html = "<label $for class='col-md-$width control-label'>" . __( $label[ 'text' ], PT_CV_DOMAIN ) . '</label>';
+				$html = "<label $for class='col-md-$width control-label'>" . $label[ 'text' ] . '</label>';
 			} else {
 				$html = '';
 			}
@@ -167,6 +174,18 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 				$value = isset( $param[ 'std' ] ) ? $param[ 'std' ] : '';
 			}
 
+			if ( $value === '' && (isset( $param[ 'std' ] ) && $param[ 'std' ] !== '') ) {
+				if ( in_array( $param[ 'type' ], array( 'number', 'text' ) ) ) {
+					if ( $name !== PT_CV_PREFIX . 'limit' ) {
+						$value = $param[ 'std' ];
+					}
+				} else if ( in_array( $param[ 'type' ], array( 'radio', 'select' ) ) ) {
+					if ( !array_key_exists( '', $param[ 'options' ] ) ) {
+						$value = $param[ 'std' ];
+					}
+				}
+			}
+
 			return $value;
 		}
 
@@ -189,7 +208,8 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 			$name		 = !empty( $param[ 'name' ] ) ? PT_CV_PREFIX . esc_attr( $param[ 'name' ] ) : '';
 			$id			 = !empty( $param[ 'id' ] ) ? "id='" . PT_CV_PREFIX . esc_attr( $param[ 'id' ] ) . "'" : '';
 			$value		 = isset( $value_ ) ? $value_ : self::field_value( $data, $param, $name );
-			$description = isset( $param[ 'desc' ] ) ? balanceTags( $param[ 'desc' ] ) : '';
+			$description = isset( $param[ 'desc' ] ) ? $param[ 'desc' ] : '';
+			$placeholder = isset( $param[ 'placeholder' ] ) ? esc_attr( $param[ 'placeholder' ] ) : '';
 
 			// Add extra information of option type
 			switch ( $type ) {
@@ -197,13 +217,15 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 					$min	 = !empty( $param[ 'min' ] ) ? intval( $param[ 'min' ] ) : 0;
 					$extend	 = 'min="' . $min . '"';
 					break;
+
 				case 'color':
 					$class .= ' ' . PT_CV_PREFIX . 'color';
 					break;
+
 				case 'checkbox':
 				case 'radio':
 					// Remove form-control class in checkbox, radio
-					$class	 = str_replace( 'form-control', '', $class );
+					$class = str_replace( 'form-control', '', $class );
 					break;
 			}
 
@@ -214,28 +236,38 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 				case 'group':
 					$html .= self::do_settings( $param[ 'params' ], $data );
 					break;
+
 				case 'text':
 				case 'email':
 				case 'password':
 				case 'number':
 				case 'url':
-					$placeholder = !empty( $param[ 'placeholder' ] ) ? $param[ 'placeholder' ] : '';
-					$append_text = !empty( $param[ 'append_text' ] ) ? $param[ 'append_text' ] : '';
+					$value = !empty( $value ) ? (($type === 'number') ? intval( $value ) : esc_attr( $value )) : $value;
+
+					$prepend_text	 = !empty( $param[ 'prepend_text' ] ) ? $param[ 'prepend_text' ] : '';
+					$append_text	 = !empty( $param[ 'append_text' ] ) ? $param[ 'append_text' ] : '';
 
 					$input = "<input type='$type' name='$name' value='$value' class='$class' $id $extend placeholder='$placeholder'>";
-					if ( empty( $append_text ) ) {
-						$html .= $input;
-					} else {
-						$html .= "<div class='input-group'>$input<span class='input-group-addon'>$append_text</span></div>";
+
+					if ( !empty( $prepend_text ) || !empty( $append_text ) ) {
+						$input = "<div class='input-group'>{$prepend_text}{$input}<span class='input-group-addon'>{$append_text}</span></div>";
 					}
+
+					$html .= $input;
 					break;
+
 				case 'color':
+					$value = esc_attr( $value );
+
 					$html .= "<input type='text' name='$name' value='$value' class='$class' $id $extend style='background-color:$value;'>";
 					$html .= "<div class='" . PT_CV_PREFIX . "colorpicker' style='z-index: 100; background:#eee; border:1px solid #ccc; position:absolute; display:none;'></div><br>";
 					break;
+
 				case 'textarea':
-					$html .= "<textarea name='$name' class='$class' $id $extend>$value</textarea>";
+					$value = esc_textarea( $value );
+					$html .= "<textarea name='$name' class='$class' $id $extend placeholder='$placeholder' rows=4>$value</textarea>";
 					break;
+
 				case 'checkbox':
 				case 'radio':
 					if ( !isset( $param[ 'options' ] ) ) {
@@ -260,19 +292,24 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 					}
 
 					break;
+
 				case 'select':
 					if ( !isset( $param[ 'options' ] ) ) {
 						break;
 					}
 
+					if ( is_string( $value ) && strpos( $value, ',' ) !== false ) {
+						$value = explode( ',', $value );
+					}
+
 					$options = '';
 					foreach ( $param[ 'options' ] as $key => $text ) {
-						$selected		 = ( in_array( $key, (array) $value ) || ( $value == 'all' ) ) ? 'selected' : '';
+						$selected		 = ( in_array( str_replace( '&amp;', '&', $key ), (array) $value ) || ( $value == 'all' ) ) ? 'selected' : '';
 						$option_class	 = isset( $param[ 'option_class_prefix' ] ) ? sprintf( "class='%s'", $param[ 'option_class_prefix' ] . esc_attr( sanitize_title( $key ) ) ) : '';
 						$options .= "<option value='$key' $selected $option_class>$text</option>";
 					}
 					if ( empty( $options ) ) {
-						$html .= "<div class='" . PT_CV_PREFIX . "text'>" . __( 'There is no option', PT_CV_DOMAIN ) . '</div>';
+						$html .= PT_CV_Settings::setting_no_option( true );
 					} else {
 						$multiple = '';
 						if ( ( isset( $param[ 'multiple' ] ) && $param[ 'multiple' ] == '1' ) || $value == 'all' ) {
@@ -283,14 +320,17 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 						$html .= "<select name='$name' class='$class' $multiple $id $extend>$options</select>";
 					}
 					break;
+
 				case 'color_picker':
 					$html .= self::field_type( $param[ 'options' ], $data );
 					break;
+
 				case 'html':
 					if ( isset( $param[ 'content' ] ) ) {
 						$html .= $param[ 'content' ];
 					}
 					break;
+
 				case 'panel_group':
 					// In format: key => array of params
 					$parent_id	 = PT_CV_Functions::string_random( true );
@@ -299,13 +339,15 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 						$html .= self::sub_panel_group( $key, $param_group, $data, $parent_id, $settings );
 					}
 					break;
-				default:
-					break;
 			}
 
 			$description = apply_filters( PT_CV_PREFIX_ . 'options_description', $description, $param );
-
 			if ( !empty( $description ) ) {
+				// Append dot to end of description
+				if ( trim( strip_tags( $description ) ) != '' && substr( $description, -1 ) != '?' ) {
+					$description .= '.';
+				}
+				// esc_html will break popover
 				$html .= "<p class='text-muted'>$description</p>";
 			}
 
@@ -323,8 +365,7 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 		 *
 		 * @return string
 		 */
-		static function sub_panel_group( $key, $param_group, $data, $parent_id,
-								   $settings = array() ) {
+		static function sub_panel_group( $key, $param_group, $data, $parent_id, $settings = array() ) {
 
 			// Content for body
 			$content = self::do_settings( $param_group, $data );
@@ -333,15 +374,17 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 			$class .= ( isset( $settings[ 'show_all' ] ) ? '' : ' hidden' );
 			$class .= ( isset( $settings[ 'show_only_one' ] ) ? ' ' . PT_CV_PREFIX . 'only-one' : '' );
 			$class .= ( isset( $settings[ 'no_panel' ] ) ? ' ' . PT_CV_PREFIX . 'no-panel' : '' );
-			$class .= ( isset( $settings[ 'no_animation' ] ) ? ' ' . PT_CV_PREFIX . 'no-animation' : '' );
 			// Id for wrapper
 			$id		 = PT_CV_Html::html_group_id( $key );
 
 			if ( !isset( $settings[ 'no_panel' ] ) ) {
-				// Heading text
-				$heading = ( isset( $settings[ 'nice_name' ] ) && isset( $settings[ 'nice_name' ][ $key ] ) ) ? $settings[ 'nice_name' ][ $key ] : PT_CV_Functions::string_slug_to_text( $key );
-				$heading = __( $heading, PT_CV_DOMAIN ) . ' ' . __( 'Settings', PT_CV_DOMAIN );
-				$html	 = PT_CV_Html::html_collapse_one( $parent_id, $id . '-child', $heading, $content, true );
+				if ( !empty( $param_group[ 'parent_label' ] ) ) {
+					$heading = $param_group[ 'parent_label' ];
+				} else {
+					$heading = isset( $settings[ 'nice_name' ][ $key ] ) ? $settings[ 'nice_name' ][ $key ] : PT_CV_Functions::string_slug_to_text( $key );
+				}
+
+				$html = PT_CV_Html::html_collapse_one( $parent_id, $id . '-child', $heading, $content, true );
 			} else {
 				$html = $content;
 			}
@@ -350,39 +393,16 @@ if ( !class_exists( 'PT_Options_Framework' ) ) {
 		}
 
 		/**
-		 * Print inline js
+		 * Start Admin JS with dependency data
 		 */
 		public static function print_js() {
-			$toggle_data_js = json_encode( self::$dependence_info );
 			?>
 			<script>
 				( function ( $ ) {
 					"use strict";
 
 					$( function () {
-						var _prefix = '<?php echo esc_js( PT_CV_PREFIX ); ?>';
-						var $pt_cv_admin_js = new $.PT_CV_Admin( { _prefix: _prefix } );
-						var group_prefix = '<?php echo esc_js( PT_CV_Html::html_group_class() ); ?>' + '-';
-
-						// Preview actions
-						$pt_cv_admin_js.preview( '<?php echo balanceTags( wp_create_nonce( PT_CV_PREFIX_ . 'ajax_nonce' ) ); ?>' );
-
-						// Custom js
-						$pt_cv_admin_js.custom();
-
-						// Toggle Panel group of 'Advance Settings'
-						$pt_cv_admin_js.toggle_group( '.' + _prefix + 'advanced-settings-item', group_prefix );
-						// Toggle Panel group of 'Terms' (in "Taxonomy Settings")
-						$pt_cv_admin_js.toggle_group( '.' + _prefix + 'taxonomy-item', group_prefix );
-						// Toggle Panel group of 'Advanced Order by'
-						$pt_cv_admin_js.toggle_group( '[name="' + _prefix + 'content-type' + '"]', group_prefix );
-						// Toggle Panel group of 'View type settings'
-						$pt_cv_admin_js.toggle_group( '[name="' + _prefix + 'view-type' + '"]', group_prefix );
-
-						// Toggle dependence
-						$pt_cv_admin_js.dependence_do_all( '<?php echo balanceTags( $toggle_data_js ); ?>' );
-
-						$pt_cv_admin_js.multi_level_toggle();
+						new $.PT_CV_Admin( { _toggle_data: '<?php echo json_encode( self::$dependence_info ); ?>' } );
 					} );
 				}( jQuery ) );
 			</script>

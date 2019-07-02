@@ -2,7 +2,7 @@
  * Main script file for WP admin
  *
  * @package   PT_Content_Views_Admin
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
@@ -14,15 +14,81 @@
 	$.PT_CV_Admin = $.PT_CV_Admin || { };
 	PT_CV_ADMIN = PT_CV_ADMIN || { };
 	ajaxurl = ajaxurl || { };
+	var _prefix = PT_CV_ADMIN._prefix;
 
 	$.PT_CV_Admin = function ( options ) {
-		this.options = options;
-		this.options.onload = 1;
-		this.options.scroll_time = 500;
-		this.options.can_preview = 1;
+		this.options = $.extend( {
+			onload: 1,
+			scroll_time: 500,
+			can_preview: 1
+		}, options );
+
+		this.init();
 	};
 
 	$.PT_CV_Admin.prototype = {
+		init: function () {
+			this.custom();
+
+			// Validate number
+			this.validate_number();
+			// Select2
+			$( 'select.' + _prefix + 'select2' ).select2();
+
+		},
+		custom: function () {
+			var $self = this;
+
+			this.preview();
+			this._preview_btn_toggle();
+			this._content_type();
+			this._toggle_taxonomy_relation();
+			this._thumbnail_settings();
+
+			// Toggle panel
+			this._toggle_panel( '.' + _prefix + 'group .panel-heading' );
+			// 'Advance Settings'
+			this.toggle_group( '.' + _prefix + 'advanced-settings-item' );
+			// 'Terms' (in "Taxonomy Settings")
+			this.toggle_group( '.' + _prefix + 'taxonomy-item' );
+			// 'Content type'
+			this.toggle_group( '[name="' + _prefix + 'content-type' + '"]', false );
+			// 'View type settings'
+			this.toggle_group( '[name="' + _prefix + 'view-type' + '"]', false );
+			// Toggle dependencies
+			this.dependence_do_all();
+
+			// Prevent click on links
+			$( '#' + _prefix + 'preview-box' ).on( 'click', 'a', function ( e ) {
+				e.preventDefault();
+			} );
+			$( '.pt-accordion-a' ).click( function ( e ) {
+				e.preventDefault();
+			} );
+
+			// Show alert when leave page without saving View
+			var checked = 0;
+			$( '#' + _prefix + 'form-view input[type="submit"]' + ',' + 'a[href*="action=duplicate"]' ).click( function () {
+				checked = 1;
+			} );
+			window.onbeforeunload = function ( event ) {
+				if ( !$self.options.onload && !checked ) {
+					var message = 'The changes you made will be lost if you navigate away from this page.';
+					if ( typeof event === 'undefined' ) {
+						event = window.event;
+					}
+					if ( event ) {
+						event.returnValue = message;
+					}
+					return message;
+				}
+			};
+
+			// Handle Pagination actions
+			$( 'body' ).bind( _prefix + 'admin-preview', function () {
+				new $.PT_CV_Public();
+			} );
+		},
 		/**
 		 * Toggle panel when click Show/Hide icon on Heading
 		 *
@@ -53,45 +119,32 @@
 		 */
 		_toggle_taxonomy_relation: function () {
 			var $self = this;
-			var _prefix = $self.options._prefix;
-
-			var $taxonomy_relation = $( '.' + _prefix + 'taxonomy-relation' ).parent().parent( '.form-group' );
-
-			// Taxonomies Settings wrapper div
-			var $wrap_taxonomies = $( '#' + _prefix + 'group-taxonomy' );
-
-			// Get Taxonomy checkbox item
-			var taxonomy_item = '.' + _prefix + 'taxonomy-item';
-
-			// Run on page load
-			$self._do_toggle_taxonomy_relation( $taxonomy_relation, $wrap_taxonomies );
-
-			// Run on change
-			$( taxonomy_item ).change( function () {
-				$self._do_toggle_taxonomy_relation( $taxonomy_relation, $wrap_taxonomies );
+			$self._do_toggle_taxonomy_relation();
+			$( '.' + _prefix + 'taxonomy-item' ).change( function () {
+				$self._do_toggle_taxonomy_relation();
 			} );
 		},
 		/**
 		 * Toggle Taxonomy Relation setting by number of selected taxonomies
 		 *
-		 * @param {type} $taxonomy_relation
-		 * @param {type} $wrap_taxonomies
 		 * @returns {undefined}
 		 */
-		_do_toggle_taxonomy_relation: function ( $taxonomy_relation, $wrap_taxonomies ) {
-			var $self = this;
-			var _prefix = $self.options._prefix;
+		_do_toggle_taxonomy_relation: function () {
+			var $taxonomy_relation = $( '.' + _prefix + 'taxonomy-relation' ).parent().parent( '.form-group' );
+			var $wrap_taxonomies = $( '#' + _prefix + 'group-taxonomy' );
 
 			// If there is no taxonomies
+			var is_multi = false;
 			if ( $wrap_taxonomies.find( '.' + _prefix + 'taxonomies .checkbox' ).filter( function () {
 				return !$( this ).hasClass( 'hidden' ) && $( this ).find( 'input:checked' ).length;
 			} ).length > 1 ) {
 				$taxonomy_relation.removeClass( 'hidden' );
-				$( '.pt-wrap' ).trigger( _prefix + 'multiple-taxonomies', [ 1, $self.options.onload ] );
+				is_multi = true;
 			} else {
 				$taxonomy_relation.addClass( 'hidden' );
-				$( '.pt-wrap' ).trigger( _prefix + 'multiple-taxonomies', [ 0, $self.options.onload ] );
 			}
+
+			$( '.pt-wrap' ).trigger( _prefix + 'multiple-taxonomies', [ is_multi ] );
 		},
 		/**
 		 * Get field value, depends on field type & its parent is show/hide
@@ -112,13 +165,12 @@
 		/**
 		 * Do toggle all dependency groups
 		 *
-		 * @param {type} $toggle_data_js_
 		 * @returns {undefined}
 		 */
-		dependence_do_all: function ( $toggle_data_js_ ) {
+		dependence_do_all: function () {
 			var $self = this;
-			var _prefix = $self.options._prefix;
-			var $toggle_data_js = $.parseJSON( $toggle_data_js_ );
+			var $toggle_data_js = $.parseJSON( $self.options._toggle_data );
+
 			$.each( $toggle_data_js, function ( idx, obj ) {
 				// Obj_sub: an object contains (dependence_id, operator, expect_val)
 				$.each( obj, function ( key, obj_sub ) {
@@ -136,6 +188,8 @@
 					} );
 				} );
 			} );
+
+			$( '.pt-wrap' ).trigger( 'finish-do-dependence' );
 		},
 		/**
 		 * Toggle each dependency group
@@ -159,7 +213,6 @@
 		 * @returns {undefined}
 		 */
 		_dependence_element: function ( dependence_id, this_val, operator, expect_val ) {
-
 			var dependence_el = $( "#" + dependence_id );
 			var pass = 0;
 			switch ( operator ) {
@@ -205,21 +258,21 @@
 		 * Toggle a group inside Panel group when check/uncheck a checkbox inside checboxes list
 		 *
 		 * @param {type} selector
-		 * @param {type} id_prefix
+		 * @param {type} toggle
 		 * @returns {undefined}
 		 */
-		toggle_group: function ( selector, id_prefix ) {
+		toggle_group: function ( selector, toggle ) {
 			var $self = this;
 			// Run on page load
 			$( selector ).each( function () {
-				$self._toggle_each_group( $( this ), id_prefix );
+				$self._toggle_each_group( $( this ), toggle );
 			} );
 			// Run on change
 			$( selector ).each( function () {
 				$( this ).change( function () {
 					var this_ = $( this );
 					setTimeout( function () {
-						$self._toggle_each_group( this_, id_prefix );
+						$self._toggle_each_group( this_, toggle );
 					}, 200 );
 				} );
 			} );
@@ -228,15 +281,14 @@
 		 * Toggle group depends on selector value
 		 *
 		 * @param {type} $this
-		 * @param {type} id_prefix
+		 * @param {type} toggle
 		 * @returns {undefined}
 		 */
-		_toggle_each_group: function ( $this, id_prefix ) {
+		_toggle_each_group: function ( $this, toggle ) {
 			var $self = this;
-			var _prefix = $self.options._prefix;
 			if ( $this.is( 'select' ) || ( ( $this.is( ':checkbox' ) || $this.is( ':radio' ) ) && $this.is( ':checked' ) ) ) {
 				// Get id of element A which needs to toggle
-				var toggle_id = '#' + id_prefix + $this.val();
+				var toggle_id = '#' + PT_CV_ADMIN._group_prefix + $this.val();
 
 				// Get siblings groups of A
 				var other_groups = $( toggle_id ).parent().children( '.' + _prefix + 'group' ).not( toggle_id );
@@ -254,7 +306,7 @@
 				$( toggle_id ).find( '.panel-body' ).show();
 
 				// Scroll to
-				if ( !$self.options.onload && !$( toggle_id ).hasClass( _prefix + 'no-animation' ) && $( toggle_id ).offset() ) {
+				if ( toggle !== false && !$self.options.onload && $( toggle_id ).offset() ) {
 					$( 'html, body' ).animate( {
 						scrollTop: $( toggle_id ).offset().top - 40
 					}, $self.options.scroll_time );
@@ -270,8 +322,10 @@
 				}, 2000 );
 
 			} else {
-				$( '#' + id_prefix + $this.val() ).addClass( 'hidden' );
+				$( '#' + PT_CV_ADMIN._group_prefix + $this.val() ).addClass( 'hidden' );
 			}
+
+			$( '.pt-wrap' ).trigger( 'finish-toggle-group' );
 		},
 		/**
 		 * Custom function for 'Content Type'
@@ -280,33 +334,41 @@
 		 */
 		_content_type: function () {
 			var $self = this;
-			var _prefix = $self.options._prefix;
-
-			// Taxonomies Settings wrapper div
 			var $wrap_taxonomies = $( '#' + _prefix + 'group-taxonomy' );
+			var $taxonomy_other_settings = $( '.' + _prefix + 'taxonomy-extra' );
+			var $taxonomies = $( '.' + _prefix + 'taxonomy-item' );
 
-			// Append <div> : "There is no taxonomy for selected content type" before description of Taxonomies
-			var no_taxonomy_id = _prefix + 'no-taxonomy';
-			var no_taxonomy_class = _prefix + 'text';
-			$wrap_taxonomies.find( '.text-muted' ).first().before( '<div id="' + no_taxonomy_id + '" class="' + no_taxonomy_class + '">' + PT_CV_ADMIN.text.no_taxonomy + '</div>' );
-			var no_taxonomy = $( '#' + no_taxonomy_id );
+			var $no_taxonomy = $( '<div/>', {
+				'id': _prefix + 'no-taxonomy',
+				'class': _prefix + 'text',
+				'text': PT_CV_ADMIN.text.no_taxonomy
+			} ).appendTo( $( '.' + _prefix + 'taxonomies' ) );
 
-			// Hide all Taxonomies at beginning
 			var fn_taxonomy_hide = function ( taxonomies ) {
+				// Hide all taxonomy checkboxes
 				taxonomies.each( function () {
 					$( this ).parents( '.checkbox' ).addClass( 'hidden' );
 				} );
-				// Hide no taxonomy div
-				no_taxonomy.addClass( 'hidden' );
 
-				// Hide Terms group
+				$no_taxonomy.addClass( 'hidden' );
+
+				// Hide all sections of taxonomies
 				$( '.panel-group.terms' ).find( '.' + _prefix + 'group' ).addClass( 'hidden' );
 			};
-			var $taxonomies = $( '.' + _prefix + 'taxonomy-item' );
+
+			// Run on page load
 			fn_taxonomy_hide( $taxonomies );
 
-			// Create function to handle
-			var fn_content_type = function ( this_val, is_change ) {
+			// For content type
+			var content_type = '[name="' + _prefix + 'content-type' + '"]';
+			var fn_content_type = function ( is_change ) {
+				var this_val;
+				if ( $( content_type ).is( 'input:radio' ) ) {
+					this_val = $( content_type + ':checked' ).val();
+				} else {
+					this_val = $( content_type ).val();
+				}
+
 				if ( typeof this_val === 'undefined' ) {
 					return;
 				}
@@ -316,13 +378,13 @@
 					$taxonomies.attr( 'checked', false );
 
 					// Toggle Taxonomy Relation setting
-					var $taxonomy_relation = $( '.' + _prefix + 'taxonomy-relation' ).parent().parent( '.form-group' );
-					$self._do_toggle_taxonomy_relation( $taxonomy_relation, $wrap_taxonomies );
+					$self._do_toggle_taxonomy_relation();
 				}
 
-				// Show taxonomies relates to selected post type
+				// Show taxonomies of selected post type
 				if ( this_val !== '' ) {
 					fn_taxonomy_hide( $taxonomies );
+
 					$taxonomies.filter( function () {
 						var val = $( this ).val();
 						var $taxonomies_of_this = PT_CV_ADMIN.data.post_types_vs_taxonomies[this_val] || '';
@@ -330,45 +392,40 @@
 					} ).parents( '.checkbox' ).removeClass( 'hidden' );
 				}
 
-				// Show there is no taxonomies
-				if ( $wrap_taxonomies.find( '.pt-params .checkbox' ).filter( function () {
+				// Show message "there is no taxonomy"
+				if ( $wrap_taxonomies.find( '.' + _prefix + 'taxonomies .checkbox' ).filter( function () {
 					return !$( this ).hasClass( 'hidden' );
 				} ).length === 0 ) {
-					// Show no taxonomy div
-					no_taxonomy.removeClass( 'hidden' );
+					$no_taxonomy.removeClass( 'hidden' );
+					$taxonomy_other_settings.addClass( 'hidden' );
 				}
 
 				// Trigger custom actions
 				$( '.pt-wrap' ).trigger( 'content-type-change', [ this_val ] );
 			};
 
-			// Get "Content Type" input object
-			var content_type = '[name="' + _prefix + 'content-type' + '"]';
-
 			// Run on page load
-			fn_content_type( $( content_type + ':checked' ).val() );
+			fn_content_type();
 
 			// Run on change
 			$( content_type ).change( function () {
-				fn_content_type( $( content_type + ':checked' ).val(), 1 );
+				fn_content_type( 1 );
 			} );
 		},
 		/**
 		 * Preview handle
 		 *
-		 * @param {string} _nonce
 		 * @returns {undefined}
 		 */
-		preview: function ( _nonce ) {
+		preview: function () {
 			var $self = this;
-			var _prefix = $self.options._prefix;
-
-			// Store previous offset top position
 			var offset_top;
 
 			$( '#' + _prefix + 'show-preview' ).click( function ( e ) {
 				e.stopPropagation();
 				e.preventDefault();
+
+				$( 'body' ).trigger( _prefix + 'admin-preview-start' );
 
 				var $this_btn = $( this );
 
@@ -403,7 +460,7 @@
 					// Get settings data
 					var data = $( '#' + _prefix + 'form-view' ).serialize();
 					// Call handle function
-					$self._preview_request( $preview, data, _nonce, $this_btn );
+					$self._preview_request( $preview, data, $this_btn );
 				} else {
 					// Scroll to previous position
 					$( 'html, body' ).animate( {
@@ -425,19 +482,15 @@
 		 *
 		 * @param {object} preview_box The jqurey object
 		 * @param {string} _data
-		 * @param {string} _nonce The generated nonce
 		 * @param {object} $this_btn The Show/Hide preview button
 		 * @returns void
 		 */
-		_preview_request: function ( preview_box, _data, _nonce, $this_btn ) {
+		_preview_request: function ( preview_box, _data, $this_btn ) {
 			var $self = this;
-			var _prefix = $self.options._prefix;
-
-			// Setup data
 			var data = {
 				action: 'preview_request',
 				data: _data,
-				ajax_nonce: _nonce
+				ajax_nonce: PT_CV_ADMIN._nonce
 			};
 
 			// Sent POST request
@@ -446,16 +499,25 @@
 				url: ajaxurl,
 				data: data
 			} ).done( function ( response ) {
-				if ( response == -1 ) {
-					location.reload();
+				var reload = false;
+				if ( response == -1 || response == 0 ) {
+					reload = true;
+					response = "Your session has expired. This page will be reloaded.";
 				}
 
 				preview_box.css( 'opacity', '1' );
+
 				// Hide loading icon
 				preview_box.next().addClass( 'hidden' );
 
 				// Update content of Preview box
 				preview_box.html( response );
+
+				if ( reload ) {
+					location.reload();
+				}
+
+				$self._filter_response( preview_box );
 
 				// Toggle text of this button
 				$this_btn.html( PT_CV_ADMIN.btn.preview.hide );
@@ -467,33 +529,37 @@
 				$( 'body' ).trigger( _prefix + 'admin-preview' );
 			} );
 		},
+		_filter_response: function ( preview_box ) {
+			var fn_alert_visible_sc = function () {
+				$( '.' + _prefix + 'content', preview_box ).each( function () {
+					var tclass = _prefix + 'caution';
+					$( '.' + tclass ).remove();
+
+					var content = $( this ).html();
+					var regex = /\[[^\]]+\]/;
+					if ( regex.test( content ) ) {
+						$( '<div />', { html: PT_CV_ADMIN.text.visible_shortcode, class: tclass } ).insertBefore( preview_box );
+						return false;
+					}
+				} );
+			};
+			fn_alert_visible_sc();
+
+			$( 'body' ).trigger( _prefix + 'preview-response', [ preview_box ] );
+		},
 		/**
 		 * Toggle 'Thumbnail settings'
 		 *
 		 * @returns {undefined}
 		 */
 		_thumbnail_settings: function () {
-			var _prefix = this.options._prefix;
-			var _thumbnail_setting_state = 1;
-
-			/**
-			 * Toggle 'Thumbnail settings' when change 'Layout format'
-			 *
-			 * @param this_val Layout format value
-			 * @returns void
-			 */
+			// Toggle 'Thumbnail settings' when change 'Layout format'
 			var fn_thumbnail_setting = function ( this_val ) {
+				var $show_thumbnail = $( '[name="' + _prefix + 'show-field-thumbnail' + '"]' );
 
-				var $thumbnail_wrapper = $( '.' + _prefix + 'thumbnail-setting' ).parent();
-				if ( this_val === '2-col' ) {
-					_thumbnail_setting_state = $thumbnail_wrapper.hasClass( 'hidden' ) ? 0 : 1;
-					$thumbnail_wrapper.removeClass( 'hidden' );
-				} else if ( this_val === '1-col' ) {
-					if ( _thumbnail_setting_state ) {
-						$thumbnail_wrapper.removeClass( 'hidden' );
-					} else {
-						$thumbnail_wrapper.addClass( 'hidden' );
-					}
+				// Force to show thumbnail IF it is not enabled
+				if ( this_val === '2-col' && !$show_thumbnail.is( ':checked' ) ) {
+					$show_thumbnail.trigger( 'click' );
 				}
 			};
 
@@ -514,31 +580,34 @@
 			 * @param {type} layout_format
 			 * @returns {undefined}
 			 */
-			var fn_layout_format = function ( this_val, layout_format ) {
+			var view_type = '[name="' + _prefix + 'view-type' + '"]';
+			var fn_layout_format = function ( layout_format ) {
+				var this_val;
+				if ( $( view_type ).is( 'input:radio' ) ) {
+					this_val = $( view_type + ':checked' ).val();
+				} else {
+					this_val = $( view_type ).val();
+				}
+
 				var expect_val = [ 'scrollable' ];
 
 				// Add more layouts
 				$( '.pt-wrap' ).trigger( 'toggle-layout-format', [ expect_val ] );
 
 				if ( $.inArray( this_val, expect_val ) >= 0 ) {
-					// Trigger select 1-col
 					$( layout_format + '[value="1-col"]' ).trigger( 'click' );
-					// Disable 2-col
 					$( layout_format + '[value="2-col"]' ).attr( 'disabled', true );
 				} else {
-					// Enable 2-col
 					$( layout_format + '[value="2-col"]' ).attr( 'disabled', false );
 				}
 			};
 
-			var view_type = '[name="' + _prefix + 'view-type' + '"]';
-
 			// Run on page load
-			fn_layout_format( $( view_type + ':checked' ).val(), layout_format );
+			fn_layout_format( layout_format );
 
 			// Run on change
 			$( view_type ).change( function () {
-				fn_layout_format( $( view_type + ':checked' ).val(), layout_format );
+				fn_layout_format( layout_format );
 			} );
 		},
 		/**
@@ -546,9 +615,7 @@
 		 * @returns {undefined}
 		 */
 		_preview_btn_toggle: function () {
-
 			var $self = this;
-			var _prefix = $self.options._prefix;
 
 			var _fn = function ( is_trigger ) {
 				if ( !is_trigger ) {
@@ -571,36 +638,6 @@
 			} );
 		},
 		/**
-		 * Do handy toggle for Excerpt settings
-		 *
-		 * @returns {undefined}
-		 */
-		multi_level_toggle: function () {
-			var _prefix = this.options._prefix;
-
-			// For Excerpt Settings
-			var _this_toggle = function ( show_content ) {
-				if ( !show_content ) {
-					$( '#' + _prefix + 'group-excerpt-settings' ).addClass( 'hidden' );
-				} else {
-					$( '#' + _prefix + 'group-excerpt-settings' ).removeClass( 'hidden' );
-				}
-			};
-
-			var selector = '[name="' + _prefix + 'show-field-content' + '"]';
-
-			// Run on page load
-			_this_toggle( $( selector ).is( ':checked' ) );
-
-			// Run on change
-			$( selector ).change( function () {
-				_this_toggle( $( selector ).is( ':checked' ) );
-			} );
-
-			// Handy do other toggle
-			$( '.pt-wrap' ).trigger( _prefix + 'multi-level-toggle' );
-		},
-		/**
 		 * Validate number: prevent negative value
 		 * @returns {undefined}
 		 */
@@ -610,71 +647,7 @@
 				if ( min == 0 && !( event.charCode >= 48 && event.charCode <= 57 ) )
 					event.preventDefault();
 			} );
-		},
-		/**
-		 * Custom js for elements
-		 * @returns {undefined}
-		 */
-		custom: function () {
-			var $self = this;
-			var _prefix = $self.options._prefix;
-
-			$self._preview_btn_toggle();
-
-			// Custom JS for Content Type
-			$self._content_type();
-
-			// Toggle Taxonomy Relation
-			$self._toggle_taxonomy_relation();
-
-			// Toggle panel of 'Advanced filters'
-			$self._toggle_panel( '.' + _prefix + 'group .panel-heading' );
-
-			// 'Thumbnail settings' toggle
-			$self._thumbnail_settings();
-
-			// Select 2
-			$( '.' + _prefix + 'select2' ).select2();
-
-			// Change class of panel inside panel
-			$( '.' + _prefix + 'group .panel .panel' ).each( function () {
-				$( this ).removeClass( 'panel-primary' ).addClass( 'panel-info' );
-			} );
-
-			// Set custom style for 'Thumbnail position' box
-			$( '.' + _prefix + 'bg-none' ).parent().css( { 'background-color': '#fff', 'padding-bottom': '10px' } );
-			$( '.' + _prefix + 'bg-none' ).parent().addClass( 'unsortable' );
-
-			// Prevent click on links
-			$( '#' + _prefix + 'preview-box' ).on( 'click', 'a', function ( e ) {
-				e.preventDefault();
-			} );
-
-			// Handle Pagination actions
-			$( 'body' ).bind( _prefix + 'admin-preview', function () {
-				new $.PT_CV_Public( { _prefix: _prefix } );
-			} );
-
-			// Prevent missing changes
-			var checked = 0;
-			$( '#' + _prefix + 'form-view input[type="submit"]' + ',' + 'a[href*="action=duplicate"]' ).click( function () {
-				checked = 1;
-			} );
-			window.onbeforeunload = function ( event ) {
-				if ( !$self.options.onload && !checked ) {
-					var message = 'The changes you made will be lost if you navigate away from this page.';
-					if ( typeof event === 'undefined' ) {
-						event = window.event;
-					}
-					if ( event ) {
-						event.returnValue = message;
-					}
-					return message;
-				}
-			};
-
-			// Validate number
-			$self.validate_number();
 		}
 	};
+
 }( jQuery ) );

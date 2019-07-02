@@ -3,11 +3,14 @@
  * Setting page
  *
  * @package   PT_Content_Views_Admin
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
 ?>
 
 <div class="wrap">

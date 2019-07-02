@@ -1,14 +1,17 @@
 <?php
-
 /**
  * Layout Name: Scrollable List
  *
  * @package   PT_Content_Views
- * @author    PT Guy <palaceofthemes@gmail.com>
+ * @author    PT Guy <http://www.contentviewspro.com/>
  * @license   GPL-2.0+
  * @link      http://www.contentviewspro.com/
  * @copyright 2014 PT Guy
  */
+if ( !defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 $html = array();
 
 $ex_cap_cls = PT_CV_PREFIX . 'cap-w-img';
@@ -26,7 +29,7 @@ if ( !empty( $img ) ) {
 $others_html = implode( "\n", $fields_html );
 
 // Get wrapper class of caption
-$caption_class	 = apply_filters( PT_CV_PREFIX_ . 'scrollable_caption_class', array( 'carousel-caption', $ex_cap_cls ) );
-$html[]			 = sprintf( '<div class="%s">%s</div>', esc_attr( implode( ' ', array_filter( $caption_class ) ) ), balanceTags( $others_html ) );
+$caption_class	 = apply_filters( PT_CV_PREFIX_ . 'scrollable_caption_class', array( PT_CV_PREFIX . 'carousel-caption', $ex_cap_cls ) );
+$html[]			 = sprintf( '<div class="%s">%s</div>', esc_attr( implode( ' ', array_filter( $caption_class ) ) ), $others_html );
 
-echo balanceTags( implode( "\n", $html ) );
+echo implode( "\n", $html );
